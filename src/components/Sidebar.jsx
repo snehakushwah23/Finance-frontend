@@ -33,6 +33,12 @@ export default function Sidebar({ categories, selected, onSelect, branches }) {
             >
               All Branches
             </button>
+            <button
+              className="w-full text-left px-4 py-2 hover:bg-gray-100"
+              onClick={() => navigate('/branches/loans')}
+            >
+              Loans to Customer
+            </button>
             {branches.map(branch => (
               <button
                 key={branch}
@@ -44,6 +50,22 @@ export default function Sidebar({ categories, selected, onSelect, branches }) {
             ))}
           </div>
         )}
+        
+        {/* Customer Expenses */}
+        <button
+          className="w-full text-left px-4 py-2 hover:bg-gray-100"
+          onClick={() => navigate('/customer-expenses')}
+        >
+          Customer Expenses
+        </button>
+        
+        {/* Employee Master */}
+        <button
+          className="w-full text-left px-4 py-2 hover:bg-gray-100"
+          onClick={() => navigate('/employee-master')}
+        >
+          Employee Master
+        </button>
       </nav>
     </aside>
   );
