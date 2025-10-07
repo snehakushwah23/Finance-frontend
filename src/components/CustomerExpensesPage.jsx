@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import Modal from './Modal';
+import { api } from '../config/api';
 
 function CustomerExpensesPage({ categories = [] }) {
   const [customerExpenses, setCustomerExpenses] = useState([]);
@@ -31,7 +32,7 @@ function CustomerExpensesPage({ categories = [] }) {
   const loadCustomerExpenses = async () => {
     try {
       setLoading(true);
-      const response = await axios.get('/api/customer-expenses');
+      const response = await axios.get(api.get('/api/customer-expenses'));
       // Sort by date descending (newest first)
       const sortedExpenses = response.data.sort((a, b) => new Date(b.date) - new Date(a.date));
       setCustomerExpenses(sortedExpenses);
@@ -60,7 +61,7 @@ function CustomerExpensesPage({ categories = [] }) {
 
     try {
       setLoading(true);
-      await axios.post('/api/customer-expenses', formData);
+      await axios.post(api.post('/api/customer-expenses'), formData);
       setAddFormOpen(false);
       setFormData({ customerName: '', date: '', amount: '', category: '', description: '' });
       // Reload expenses to maintain proper sorting
@@ -82,7 +83,7 @@ function CustomerExpensesPage({ categories = [] }) {
 
     try {
       setLoading(true);
-      await axios.put(`/api/customer-expenses/${editingExpense._id}`, formData);
+      await axios.put(api.put(`/api/customer-expenses/${editingExpense._id}`), formData);
       setEditFormOpen(false);
       setEditingExpense(null);
       setFormData({ customerName: '', date: '', amount: '', category: '', description: '' });
@@ -103,7 +104,7 @@ function CustomerExpensesPage({ categories = [] }) {
 
     try {
       setLoading(true);
-      await axios.delete(`/api/customer-expenses/${id}`);
+      await axios.delete(api.delete(`/api/customer-expenses/${id}`));
       // Reload expenses to maintain proper sorting
       loadCustomerExpenses();
     } catch (error) {

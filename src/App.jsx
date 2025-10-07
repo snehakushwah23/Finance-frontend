@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, useParams } from 'react-router-dom';
+import { api } from './config/api';
 function CategoryPage(props) {
   const { categoryName } = useParams();
   return <MainContent {...props} selectedCategory={decodeURIComponent(categoryName)} />;
@@ -209,7 +210,7 @@ export default function App() {
   const [branches, setBranches] = useState([]);
 
   useEffect(() => {
-    axios.get('/api/branches')
+    axios.get(api.get('/api/branches'))
       .then(res => setBranches(res.data.map(b => b.name)))
       .catch(() => setBranches([]));
   }, []);
@@ -217,7 +218,7 @@ export default function App() {
   // Test API connection and load initial data on startup
   useEffect(() => {
     // First test basic backend connection
-    axios.get('/api/test')
+    axios.get(api.get('/api/test'))
       .then(res => {
         // If backend is working, trigger initial load by toggling reload
         if (res.data.status === 'Database connected') {
@@ -236,7 +237,7 @@ export default function App() {
     const loadExpenses = async () => {
       try {
         // Load all expenses from API
-        const allResponse = await axios.get('/api/expenses/all');
+        const allResponse = await axios.get(api.get('/api/expenses/all'));
         
         if (allResponse.data && allResponse.data.length >= 0) {
           setExpenses(allResponse.data);

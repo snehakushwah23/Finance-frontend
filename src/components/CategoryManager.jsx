@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import Modal from './Modal';
 import ExpenseTable from './ExpenseTable';
 import axios from 'axios';
+import { api } from '../config/api';
 
 export default function CategoryManager({ categories, setCategories, expenses, months, selectedMonth, setReload }) {
   const location = useLocation();
@@ -39,7 +40,7 @@ export default function CategoryManager({ categories, setCategories, expenses, m
   // Load customer expenses
   const loadCustomerExpenses = async () => {
     try {
-      const response = await axios.get('/api/customer-expenses');
+      const response = await axios.get(api.get('/api/customer-expenses'));
       const sortedExpenses = response.data.sort((a, b) => new Date(b.date) - new Date(a.date));
       setCustomerExpenses(sortedExpenses);
     } catch (error) {

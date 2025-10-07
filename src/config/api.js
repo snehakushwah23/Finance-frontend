@@ -1,6 +1,6 @@
 // API configuration
 const isDevelopment = import.meta.env.DEV;
-const RENDER_BACKEND_URL = 'https://your-render-backend-url.onrender.com';
+const RENDER_BACKEND_URL = 'https://finance-backend-j9oh.onrender.com';
 
 export const API_BASE_URL = isDevelopment 
   ? '' // Use Vite proxy in development
