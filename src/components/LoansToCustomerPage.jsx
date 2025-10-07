@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import axios from 'axios';
+import { api } from '../config/api';
 import Modal from './Modal';
 
 export default function LoansToCustomerPage({ branches = [] }) {
@@ -72,7 +73,7 @@ export default function LoansToCustomerPage({ branches = [] }) {
     }
     try {
       const payload = { ...form, branch: selectedBranch.toLowerCase() };
-      await axios.post('/api/branch-entries', payload);
+      await axios.post(api.post('/api/branch-entries'), payload);
       setAddOpen(false);
       setForm({ date: '', customer: '', place: '', mobile: '', loan: '', interest: '', emi: '' });
       // Reload list
@@ -166,7 +167,7 @@ export default function LoansToCustomerPage({ branches = [] }) {
         emi: '0',
         date: paymentForm.date
       };
-      await axios.post('/api/branch-entries', payload);
+      await axios.post(api.post('/api/branch-entries'), payload);
       setPaymentOpen(false);
       setPaymentForm({ branch: '', customer: '', date: '', amount: '' });
       alert('Payment recorded successfully');

@@ -4,6 +4,7 @@ import { useParams } from 'react-router-dom';
 import { FaSearch } from 'react-icons/fa';
 import Modal from './Modal';
 import axios from 'axios';
+import { api } from '../config/api';
 
 
 export default function BranchPage() {
@@ -24,7 +25,7 @@ export default function BranchPage() {
   useEffect(() => {
     async function fetchEntries() {
       try {
-        const res = await axios.get(`/api/branch-entries/${branchId}`);
+        const res = await axios.get(api.get(`/api/branch-entries/${branchId}`));
         setData(res.data);
       } catch {
         setData([]);
@@ -60,7 +61,7 @@ export default function BranchPage() {
       // Update entry in backend
       const entryId = data[editIdx]._id;
       try {
-        const res = await axios.put(`/api/branch-entries/${entryId}`, entryData);
+        const res = await axios.put(api.put(`/api/branch-entries/${entryId}`), entryData);
         setData(data.map((row, i) => i === editIdx ? res.data : row));
         setEditIdx(null);
       } catch (err) {
@@ -70,7 +71,7 @@ export default function BranchPage() {
     } else {
       // Add entry to backend
       try {
-        const res = await axios.post('/api/branch-entries', entryData);
+        const res = await axios.post(api.post('/api/branch-entries'), entryData);
         setData([res.data, ...data]);
       } catch (err) {
         setError('Error adding entry');
@@ -89,7 +90,7 @@ export default function BranchPage() {
 
   function handleDelete(idx) {
     const entryId = data[idx]._id;
-    axios.delete(`/api/branch-entries/${entryId}`)
+    axios.delete(api.delete(`/api/branch-entries/${entryId}`))
       .then(() => {
         setData(data.filter((_, i) => i !== idx));
         if (editIdx === idx) setEditIdx(null);

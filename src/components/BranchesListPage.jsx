@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
 import axios from 'axios';
+import { api } from '../config/api';
 import Modal from './Modal';
 
 function BranchesListPage({ branches, setBranches }) {
@@ -34,7 +35,7 @@ function BranchesListPage({ branches, setBranches }) {
   async function openBranchModal(branch) {
     setBranchModal(branch);
     try {
-      const res = await axios.get(`/api/branch-entries/${branch.toLowerCase()}`);
+      const res = await axios.get(api.get(`/api/branch-entries/${branch.toLowerCase()}`));
       // Show only loan entries, filter out payments
       const loanEntries = (res.data || []).filter(entry => entry.place !== 'Payment');
       setBranchData(loanEntries);
@@ -62,18 +63,18 @@ function BranchesListPage({ branches, setBranches }) {
         emi: '0',
         date: paymentForm.date
       };
-      await axios.post('/api/branch-entries', payload);
+      await axios.post(api.post('/api/branch-entries'), payload);
       setPaymentOpen(false);
       setPaymentForm({ branch: '', customer: '', date: '', amount: '' });
       alert('Payment recorded successfully');
       // Reload data for the selected branch if modal is open
       if (branchModal) {
-        const res = await axios.get(`/api/branch-entries/${branchModal.toLowerCase()}`);
+        const res = await axios.get(api.get(`/api/branch-entries/${branchModal.toLowerCase()}`));
         const loanEntries = (res.data || []).filter(entry => entry.place !== 'Payment');
         setBranchData(loanEntries);
       }
       // Also reload the main branch data
-      const res = await axios.get('/api/branches');
+      const res = await axios.get(api.get('/api/branches'));
       setBranches(res.data.map(b => b.name));
     } catch (e) {
       alert(e.response?.data?.error || 'Failed to record payment');
@@ -84,7 +85,7 @@ function BranchesListPage({ branches, setBranches }) {
 
   async function loadCustomerPayments(customer, branch) {
     try {
-      const res = await axios.get(`/api/branch-entries/${branch.toLowerCase()}`);
+      const res = await axios.get(api.get(`/api/branch-entries/${branch.toLowerCase()}`));
       // Load ONLY payment entries for this customer
       const paymentEntries = (res.data || []).filter(entry => 
         entry.customer === customer && entry.place === 'Payment'
@@ -112,9 +113,9 @@ function BranchesListPage({ branches, setBranches }) {
   async function handleDeleteEntry(id) {
     if (!window.confirm('Delete this entry?')) return;
     try {
-      await axios.delete(`/api/branch-entries/${id}`);
+      await axios.delete(api.delete(`/api/branch-entries/${id}`));
       // Reload data and filter out payments
-      const res = await axios.get(`/api/branch-entries/${branchModal.toLowerCase()}`);
+      const res = await axios.get(api.get(`/api/branch-entries/${branchModal.toLowerCase()}`));
       const loanEntries = (res.data || []).filter(entry => entry.place !== 'Payment');
       setBranchData(loanEntries);
     } catch (err) {
@@ -144,10 +145,10 @@ function BranchesListPage({ branches, setBranches }) {
     setLoading(true);
     try {
       // Get branch id from backend
-      const resList = await axios.get('/api/branches');
+      const resList = await axios.get(api.get('/api/branches'));
       const branchObj = resList.data.find(b => b.name === editBranch);
       if (!branchObj) throw new Error('Branch not found');
-      const res = await axios.put(`/api/branches/${branchObj._id}`, { name: editName.trim() });
+      const res = await axios.put(api.put(`/api/branches/${branchObj._id}`), { name: editName.trim() });
       setBranches(branches.map(b => (b === editBranch ? res.data.name : b)));
       setEditOpen(false);
       setEditBranch(null);
@@ -165,10 +166,10 @@ function BranchesListPage({ branches, setBranches }) {
     setLoading(true);
     try {
       // Get branch id from backend
-      const resList = await axios.get('/api/branches');
+      const resList = await axios.get(api.get('/api/branches'));
       const branchObj = resList.data.find(b => b.name === branch);
       if (!branchObj) throw new Error('Branch not found');
-      await axios.delete(`/api/branches/${branchObj._id}`);
+      await axios.delete(api.delete(`/api/branches/${branchObj._id}`));
       setBranches(branches.filter(b => b !== branch));
     } catch (err) {
       alert(err.response?.data?.error || 'Error deleting branch');
@@ -202,7 +203,7 @@ function BranchesListPage({ branches, setBranches }) {
                 return;
               }
               setLoading(true);
-              axios.post('/api/branches', { name: newBranch.trim() })
+              axios.post(api.post('/api/branches'), { name: newBranch.trim() })
                 .then(res => {
                   setBranches([...branches, res.data.name]);
                   setNewBranch('');

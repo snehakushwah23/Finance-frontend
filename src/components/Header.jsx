@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
+import { api } from '../config/api';
 
 export default function Header() {
   const [searchQuery, setSearchQuery] = useState('');
@@ -48,7 +49,7 @@ export default function Header() {
       setLoading(true);
       try {
         // Search expenses
-        const expensesRes = await axios.get('/api/expenses/all');
+        const expensesRes = await axios.get(api.get('/api/expenses/all'));
         const filteredExpenses = expensesRes.data.filter(exp => 
           exp.category?.toLowerCase().includes(searchQuery.toLowerCase()) ||
           exp.description?.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -56,7 +57,7 @@ export default function Header() {
         ).slice(0, 5); // Limit to 5 results
 
         // Search customer expenses
-        const custExpRes = await axios.get('/api/customer-expenses');
+        const custExpRes = await axios.get(api.get('/api/customer-expenses'));
         const filteredEmployeeExpenses = custExpRes.data.filter(exp =>
           exp.customerName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
           exp.category?.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -64,7 +65,7 @@ export default function Header() {
         ).slice(0, 5);
 
         // Search branches
-        const branchesRes = await axios.get('/api/branches');
+        const branchesRes = await axios.get(api.get('/api/branches'));
         const filteredBranches = branchesRes.data.filter(branch =>
           branch.name.toLowerCase().includes(searchQuery.toLowerCase())
         ).slice(0, 5);

@@ -87,7 +87,7 @@ export default function CategoryManager({ categories, setCategories, expenses, m
       
       try {
         // Add entry to backend
-        const response = await axios.post('/api/expenses', entryData);
+        const response = await axios.post(api.post('/api/expenses'), entryData);
         console.log('✅ Entry added successfully to database:', response.data);
         
         // Close modal and reset form
@@ -147,7 +147,7 @@ export default function CategoryManager({ categories, setCategories, expenses, m
     }
 
     try {
-      await axios.post('/api/customer-expenses', employeeExpenseForm);
+      await axios.post(api.post('/api/customer-expenses'), employeeExpenseForm);
       setShowEmployeeExpenseModal(false);
       setEmployeeExpenseForm({ customerName: '', date: '', amount: '', category: '' });
       // Reload expenses to maintain proper sorting

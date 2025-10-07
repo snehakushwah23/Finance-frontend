@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import axios from 'axios';
+import { api } from '../config/api';
 
 export default function ExpenseForm({ categories, months, defaultCategory, defaultMonth, onAdded }) {
   const [form, setForm] = useState({
@@ -21,7 +22,7 @@ export default function ExpenseForm({ categories, months, defaultCategory, defau
     setLoading(true);
     setError('');
     try {
-      await axios.post('/api/expenses', {
+      await axios.post(api.post('/api/expenses'), {
         ...form,
         amount: Number(form.amount),
         date: form.date || undefined
