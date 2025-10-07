@@ -1,81 +1,128 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-
-export default function Sidebar({ categories, selected, onSelect, branches }) {
-  const [indirectOpen, setIndirectOpen] = useState(false);
-  const [branchOpen, setBranchOpen] = useState(false);
+export default function Sidebar({ categories, selected, onSelect }) {
   const navigate = useNavigate();
+  const [indirectExpOpen, setIndirectExpOpen] = useState(false);
+  const [branchesOpen, setBranchesOpen] = useState(false);
+
+  // Load sidebar state from localStorage on component mount
+  useEffect(() => {
+    const savedIndirectExpOpen = localStorage.getItem('indirectExpOpen');
+    const savedBranchesOpen = localStorage.getItem('branchesOpen');
+    
+    if (savedIndirectExpOpen !== null) {
+      setIndirectExpOpen(JSON.parse(savedIndirectExpOpen));
+    }
+    if (savedBranchesOpen !== null) {
+      setBranchesOpen(JSON.parse(savedBranchesOpen));
+    }
+  }, []);
+
+  // Check current path and ensure appropriate menu is open
+  useEffect(() => {
+    const currentPath = window.location.pathname;
+    
+    // If we're on a branches-related page, ensure branches menu is open
+    if (currentPath.includes('/branches')) {
+      setBranchesOpen(true);
+    }
+    
+    // If we're on an indirect exp related page, ensure indirect exp menu is open
+    if (currentPath.includes('/indirect') || currentPath.includes('/customer-expenses')) {
+      setIndirectExpOpen(true);
+    }
+  }, []);
+
+  // Save sidebar state to localStorage whenever it changes
+  useEffect(() => {
+    localStorage.setItem('indirectExpOpen', JSON.stringify(indirectExpOpen));
+  }, [indirectExpOpen]);
+
+  useEffect(() => {
+    localStorage.setItem('branchesOpen', JSON.stringify(branchesOpen));
+  }, [branchesOpen]);
 
   return (
     <aside className="w-56 bg-white shadow h-screen fixed left-0 top-0 flex flex-col z-50">
-      <div className="p-4 font-bold text-lg border-b">Finance Manager</div>
+      <div className="p-4 font-bold text-lg border-b">Expenses</div>
       <nav className="flex-1 overflow-y-auto">
-        
-        {/* Indirect Exp - Collapsible */}
-        <button
-          className={`w-full flex items-center justify-between text-left px-4 py-2 hover:bg-gray-100 ${indirectOpen ? 'bg-gray-100 font-bold' : ''}`}
-          onClick={() => setIndirectOpen(prev => !prev)}
-        >
-          <span>Indirect Exp</span>
-          <span className={`transition-transform duration-200 ${indirectOpen ? 'rotate-90' : ''}`}>▶</span>
-        </button>
-
-        {indirectOpen && (
-          <div className="ml-4 bg-gray-50">
-            {/* Categories Manager */}
-            <button
-              className="w-full text-left px-4 py-2 hover:bg-blue-50 text-sm font-semibold"
-              onClick={() => navigate('/indirect')}
+        {/* Indirect Exp collapsible */}
+        <div>
+          <button
+            className={`w-full flex items-center justify-between text-left px-4 py-2 hover:bg-gray-100 ${selected === 'Indirect Exp' ? 'bg-gray-100 font-bold' : ''}`}
+            onClick={() => {
+              setIndirectExpOpen(!indirectExpOpen);
+              onSelect('Indirect Exp');
+              navigate('/indirect');
+            }}
+          >
+            <span>Indirect Exp</span>
+            <svg 
+              className={`w-4 h-4 transform transition-transform ${indirectExpOpen ? 'rotate-180' : ''}`}
+              fill="none" 
+              stroke="currentColor" 
+              viewBox="0 0 24 24"
             >
-              Categories
-            </button>
-
-            {/* Employee Expenses */}
-            <button
-              className="w-full text-left px-4 py-2 hover:bg-blue-50 text-sm"
-              onClick={() => navigate('/customer-expenses')}
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
+          {indirectExpOpen && (
+            <div className="ml-4">
+              <button
+                className="w-full text-left px-4 py-2 hover:bg-gray-100 text-sm text-gray-600"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  navigate('/customer-expenses');
+                }}
+              >
+                Employee Expenses
+              </button>
+              <button
+                className="w-full text-left px-4 py-2 hover:bg-gray-100 text-sm text-gray-600"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  navigate('/employee-master');
+                }}
+              >
+                Employee Master
+              </button>
+            </div>
+          )}
+        </div>
+        {/* Branches collapsible */}
+        <div>
+          <button
+            className={`w-full flex items-center justify-between text-left px-4 py-2 hover:bg-gray-100 ${selected === 'Branches' ? 'bg-gray-100 font-bold' : ''}`}
+            onClick={() => {
+              setBranchesOpen(!branchesOpen);
+              onSelect && onSelect('Branches');
+              navigate('/branches');
+            }}
+          >
+            <span>Branches</span>
+            <svg 
+              className={`w-4 h-4 transform transition-transform ${branchesOpen ? 'rotate-180' : ''}`}
+              fill="none" 
+              stroke="currentColor" 
+              viewBox="0 0 24 24"
             >
-              Employee Expenses
-            </button>
-
-            {/* Employee Master */}
-            <button
-              className="w-full text-left px-4 py-2 hover:bg-blue-50 text-sm"
-              onClick={() => navigate('/employee-master')}
-            >
-              Employee Master
-            </button>
-          </div>
-        )}
-
-        {/* Branch - Collapsible */}
-        <button
-          className={`w-full flex items-center justify-between text-left px-4 py-2 hover:bg-gray-100 ${branchOpen ? 'bg-gray-100 font-bold' : ''}`}
-          onClick={() => setBranchOpen(prev => !prev)}
-        >
-          <span>Branches</span>
-          <span className={`transition-transform duration-200 ${branchOpen ? 'rotate-90' : ''}`}>▶</span>
-        </button>
-        
-        {branchOpen && (
-          <div className="ml-4 bg-gray-50">
-            {/* Branches - Main branches page */}
-            <button
-              className="w-full text-left px-4 py-2 hover:bg-blue-50 text-sm font-semibold"
-              onClick={() => navigate('/branches')}
-            >
-              Branches
-            </button>
-            
-            {/* Loans to Customer */}
-            <button
-              className="w-full text-left px-4 py-2 hover:bg-blue-50 text-sm"
-              onClick={() => navigate('/branches/loans')}
-            >
-              Loans to Customer
-            </button>
-          </div>
-        )}
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
+          {branchesOpen && (
+            <div className="ml-4">
+              <button
+                className="w-full text-left px-4 py-2 hover:bg-gray-100 text-sm text-gray-600"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  navigate('/branches/loans');
+                }}
+              >
+                Loan to Customer
+              </button>
+            </div>
+          )}
+        </div>
       </nav>
     </aside>
   );
