@@ -1,4 +1,4 @@
-// API configuration
+// API configuration - Updated for production
 const isDevelopment = import.meta.env.DEV;
 const RENDER_BACKEND_URL = 'https://finance-backend-j9oh.onrender.com';
 
