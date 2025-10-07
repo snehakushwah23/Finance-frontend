@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { BrowserRouter, Routes, Route, useParams } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, useParams, Navigate } from 'react-router-dom';
 import { api } from './config/api';
 function CategoryPage(props) {
   const { categoryName } = useParams();
@@ -19,6 +19,7 @@ import DailyTotals from './components/DailyTotals';
 import CustomerExpensesPage from './components/CustomerExpensesPage';
 import EmployeeMasterPage from './components/EmployeeMasterPage';
 import LoansToCustomerPage from './components/LoansToCustomerPage';
+import Login from './components/Login';
 import axios from 'axios';
 
 
@@ -195,6 +196,10 @@ function AllDaysTable({ categories, month, expenses }) {
 
 
 export default function App() {
+  const [isLoggedIn, setIsLoggedIn] = useState(() => {
+    return localStorage.getItem('isLoggedIn') === 'true';
+  });
+
   const [categories, setCategories] = useState([
     'Petrol', 'Other Exp.', 'Hotel Exp', 'Office Exp.', 'Vehicle Maint.',
     'Commission', 'Office Rent', 'Telephone Exp.', 'Stationery', 'Bank',
@@ -256,74 +261,99 @@ export default function App() {
   }, [reload]); // Only depend on reload, not selectedMonth
 
 
+  // Protected Route component
+  const ProtectedRoute = ({ children }) => {
+    if (!isLoggedIn) {
+      return <Navigate to="/login" replace />;
+    }
+    return children;
+  };
+
   return (
     <BrowserRouter>
-      <div className="flex min-h-screen bg-gray-100">
-        <Sidebar categories={categories} selected={selectedCategory} onSelect={setSelectedCategory} />
-        <Header />
-        <div className="flex-1 pt-16">
-          <Routes>
-            <Route path="/" element={
-              <MainContent
-                categories={categories}
-                setCategories={setCategories}
-                selectedCategory={selectedCategory}
-                setSelectedCategory={setSelectedCategory}
-                selectedMonth={selectedMonth}
-                setSelectedMonth={setSelectedMonth}
-                expenses={expenses}
-                setExpenses={setExpenses}
-                reload={reload}
-                setReload={setReload}
-                dailyTotals={dailyTotals}
-                setDailyTotals={setDailyTotals}
-                editExpense={editExpense}
-                setEditExpense={setEditExpense}
-                editOpen={editOpen}
-                setEditOpen={setEditOpen}
-                branches={branches}
-                setBranches={setBranches}
-                months={months}
-              />
-            } />
-            <Route path="/branches" element={
-              <BranchesListPage branches={branches} setBranches={setBranches} />
-            } />
-            <Route path="/branches/:branchId" element={<BranchPage />} />
-            <Route path="/branches/loans" element={
-              <div className="flex min-h-screen bg-gray-100">
-                <Sidebar categories={categories} selected="Branches" onSelect={setSelectedCategory} branches={branches} />
-                <LoansToCustomerPage branches={branches} />
+      <Routes>
+        {/* Login Route */}
+        <Route 
+          path="/login" 
+          element={
+            isLoggedIn ? 
+            <Navigate to="/" replace /> : 
+            <Login onLogin={() => setIsLoggedIn(true)} />
+          } 
+        />
+
+        {/* Protected Routes */}
+        <Route path="*" element={
+          <ProtectedRoute>
+            <div className="flex min-h-screen bg-gray-100">
+              <Sidebar categories={categories} selected={selectedCategory} onSelect={setSelectedCategory} branches={branches} />
+              <Header />
+              <div className="flex-1 pt-16">
+                <Routes>
+                  <Route path="/" element={
+                    <MainContent
+                      categories={categories}
+                      setCategories={setCategories}
+                      selectedCategory={selectedCategory}
+                      setSelectedCategory={setSelectedCategory}
+                      selectedMonth={selectedMonth}
+                      setSelectedMonth={setSelectedMonth}
+                      expenses={expenses}
+                      setExpenses={setExpenses}
+                      reload={reload}
+                      setReload={setReload}
+                      dailyTotals={dailyTotals}
+                      setDailyTotals={setDailyTotals}
+                      editExpense={editExpense}
+                      setEditExpense={setEditExpense}
+                      editOpen={editOpen}
+                      setEditOpen={setEditOpen}
+                      branches={branches}
+                      setBranches={setBranches}
+                      months={months}
+                    />
+                  } />
+                  <Route path="/branches" element={
+                    <BranchesListPage branches={branches} setBranches={setBranches} />
+                  } />
+                  <Route path="/branches/:branchId" element={<BranchPage />} />
+                  <Route path="/branches/loans" element={
+                    <div className="flex min-h-screen bg-gray-100">
+                      <Sidebar categories={categories} selected="Branches" onSelect={setSelectedCategory} branches={branches} />
+                      <LoansToCustomerPage branches={branches} />
+                    </div>
+                  } />
+                  <Route path="/indirect" element={
+                    <div className="flex min-h-screen bg-gray-100">
+                      <Sidebar categories={categories} selected="Indirect Exp" onSelect={setSelectedCategory} branches={branches} />
+                      <CategoryManager
+                        categories={categories}
+                        setCategories={setCategories}
+                        expenses={expenses}
+                        months={months}
+                        selectedMonth={selectedMonth}
+                        setReload={setReload}
+                      />
+                    </div>
+                  } />
+                  <Route path="/customer-expenses" element={
+                    <div className="flex min-h-screen bg-gray-100">
+                      <Sidebar categories={categories} selected="Indirect Exp" onSelect={setSelectedCategory} branches={branches} />
+                      <CustomerExpensesPage categories={categories} />
+                    </div>
+                  } />
+                  <Route path="/employee-master" element={
+                    <div className="flex min-h-screen bg-gray-100">
+                      <Sidebar categories={categories} selected="Indirect Exp" onSelect={setSelectedCategory} branches={branches} />
+                      <EmployeeMasterPage categories={categories} />
+                    </div>
+                  } />
+                </Routes>
               </div>
-            } />
-            <Route path="/indirect" element={
-              <div className="flex min-h-screen bg-gray-100">
-                <Sidebar categories={categories} selected="Indirect Exp" onSelect={setSelectedCategory} branches={branches} />
-                <CategoryManager
-                  categories={categories}
-                  setCategories={setCategories}
-                  expenses={expenses}
-                  months={months}
-                  selectedMonth={selectedMonth}
-                  setReload={setReload}
-                />
-              </div>
-            } />
-            <Route path="/customer-expenses" element={
-              <div className="flex min-h-screen bg-gray-100">
-                <Sidebar categories={categories} selected="Indirect Exp" onSelect={setSelectedCategory} branches={branches} />
-                <CustomerExpensesPage categories={categories} />
-              </div>
-            } />
-            <Route path="/employee-master" element={
-              <div className="flex min-h-screen bg-gray-100">
-                <Sidebar categories={categories} selected="Indirect Exp" onSelect={setSelectedCategory} branches={branches} />
-                <EmployeeMasterPage categories={categories} />
-              </div>
-            } />
-          </Routes>
-        </div>
-      </div>
+            </div>
+          </ProtectedRoute>
+        } />
+      </Routes>
     </BrowserRouter>
   );
 }
