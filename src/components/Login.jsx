@@ -88,14 +88,6 @@ export default function Login({ onLogin }) {
             {loading ? 'Signing in...' : 'Sign In'}
           </button>
         </form>
-
-        <div className="mt-6 text-center text-sm text-gray-600">
-          <p>Demo Credentials:</p>
-          <p className="font-mono bg-gray-100 px-3 py-2 rounded mt-2">
-            Username: admin<br />
-            Password: admin@123
-          </p>
-        </div>
       </div>
     </div>
   );
