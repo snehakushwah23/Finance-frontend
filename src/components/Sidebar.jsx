@@ -22,6 +22,14 @@ export default function Sidebar({ categories, selected, onSelect, branches }) {
         
         {indirectOpen && (
           <div className="ml-4 bg-gray-50">
+            {/* Employee Expenses */}
+            <button
+              className="w-full text-left px-4 py-2 hover:bg-blue-50 text-sm"
+              onClick={() => navigate('/employee-master')}
+            >
+              Employee Expenses
+            </button>
+            
             {/* Employee Master */}
             <button
               className="w-full text-left px-4 py-2 hover:bg-blue-50 text-sm"
@@ -76,12 +84,12 @@ export default function Sidebar({ categories, selected, onSelect, branches }) {
         
         {branchOpen && (
           <div className="ml-4 bg-gray-50">
-            {/* All Branches */}
+            {/* Branches - Main branches page */}
             <button
               className="w-full text-left px-4 py-2 hover:bg-blue-50 text-sm font-semibold"
               onClick={() => navigate('/branches')}
             >
-              All Branches
+              Branches
             </button>
             
             {/* Loans to Customer */}
@@ -91,17 +99,6 @@ export default function Sidebar({ categories, selected, onSelect, branches }) {
             >
               Loans to Customer
             </button>
-            
-            {/* Individual Branches */}
-            {branches && branches.map(branch => (
-              <button
-                key={branch}
-                className="w-full text-left px-4 py-2 hover:bg-blue-50 text-sm"
-                onClick={() => navigate(`/branches/${encodeURIComponent(branch.toLowerCase().replace(/ /g, '-'))}`)}
-              >
-                {branch}
-              </button>
-            ))}
           </div>
         )}
       </nav>
