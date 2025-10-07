@@ -5,7 +5,6 @@ function CategoryPage(props) {
   return <MainContent {...props} selectedCategory={decodeURIComponent(categoryName)} />;
 }
 import Sidebar from './components/Sidebar';
-import Header from './components/Header';
 import MainContent from './components/MainContent';
 import BranchPage from './components/BranchPage';
 import BranchesListPage from './components/BranchesListPage';
@@ -15,9 +14,6 @@ import ExpenseForm from './components/ExpenseForm';
 import Modal from './components/Modal';
 import ExpenseEditModal from './components/ExpenseEditModal';
 import DailyTotals from './components/DailyTotals';
-import CustomerExpensesPage from './components/CustomerExpensesPage';
-import EmployeeMasterPage from './components/EmployeeMasterPage';
-import LoansToCustomerPage from './components/LoansToCustomerPage';
 import axios from 'axios';
 
 
@@ -135,6 +131,191 @@ function CategoryDailyTotals({ categories, selectedMonth, expenses }) {
 }
 
 
+function CategoryManager({ categories, setCategories, expenses, months, selectedMonth, setReload }) {
+  const [showAllDays, setShowAllDays] = useState(false);
+  const [catModal, setCatModal] = useState(null);
+  const [editCat, setEditCat] = useState(null);
+  const [newCat, setNewCat] = useState('');
+  const [editCatName, setEditCatName] = useState('');
+  const [showTotalModal, setShowTotalModal] = useState(false);
+  const [totalMonth, setTotalMonth] = useState(months[0]);
+  const [totalDate, setTotalDate] = useState('');
+  const [totalAmount, setTotalAmount] = useState(null);
+
+  const handleAddCategory = () => {
+    if (newCat && !categories.includes(newCat)) {
+      setCategories([...categories, newCat]);
+      setNewCat('');
+    }
+  };
+  const handleEditCategory = () => {
+    if (editCat && editCatName && editCatName !== editCat) {
+      setCategories(categories.map(c => (c === editCat ? editCatName : c)));
+      setEditCat(null);
+      setEditCatName('');
+    }
+  };
+  const handleDeleteCategory = cat => {
+    if (window.confirm(`Delete category "${cat}"? This will not delete expenses.`)) {
+      setCategories(categories.filter(c => c !== cat));
+    }
+  };
+  return (
+    <>
+      <div>
+        <div className="flex gap-4 mb-6 items-center">
+          <input
+            className="border rounded-lg px-3 py-2"
+            placeholder="New category name"
+            value={newCat}
+            onChange={e => setNewCat(e.target.value)}
+          />
+          <button
+            className="bg-green-600 text-white px-4 py-2 rounded-lg font-semibold shadow hover:bg-green-700"
+            onClick={handleAddCategory}
+          >
+            Add Category
+          </button>
+          <button
+            className="bg-blue-600 text-white px-4 py-2 rounded-lg font-semibold shadow hover:bg-blue-700"
+            onClick={() => setShowTotalModal(true)}
+          >
+            Total
+          </button>
+        </div>
+        <div className="space-y-4">
+          {categories.map(cat => (
+            <div key={cat} className="bg-white rounded shadow p-4 flex items-center justify-between">
+              <div className="flex-1 cursor-pointer" onClick={() => setCatModal(cat)}>
+                <h2 className="text-lg font-bold mb-2">{cat}</h2>
+                <div className="text-gray-500 text-sm">{expenses.find(e => e.cat === cat)?.data.length || 0} entries</div>
+              </div>
+              <div className="flex gap-2">
+                <button title="Edit" className="p-2" onClick={() => { setEditCat(cat); setEditCatName(cat); }}>
+                  {/* Pencil icon, more visually appealing */}
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-blue-600 hover:text-blue-800" viewBox="0 0 20 20" fill="currentColor">
+                    <path d="M17.414 2.586a2 2 0 00-2.828 0l-9.5 9.5A2 2 0 004 14.5V17a1 1 0 001 1h2.5a2 2 0 001.414-.586l9.5-9.5a2 2 0 000-2.828l-2-2zM5 16v-1.5a.5.5 0 01.146-.354l9.5-9.5a.5.5 0 01.708.708l-9.5 9.5A.5.5 0 015 16z" />
+                  </svg>
+                </button>
+                <button title="Delete" className="p-2" onClick={() => handleDeleteCategory(cat)}>
+                  {/* Trash bin icon for delete */}
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-red-600 hover:text-red-800" viewBox="0 0 20 20" fill="currentColor">
+                    <path fillRule="evenodd" d="M6 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm4 0a1 1 0 012 0v6a1 1 0 11-2 0V8zM4 6a1 1 0 011-1h10a1 1 0 011 1v1H4V6zm2-3a1 1 0 011-1h6a1 1 0 011 1v1H6V3zm9 2V6a2 2 0 01-2 2v7a2 2 0 01-2 2H7a2 2 0 01-2-2V8a2 2 0 01-2-2V5a2 2 0 012-2h10a2 2 0 012 2z" clipRule="evenodd" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+      <Modal open={showTotalModal} onClose={() => setShowTotalModal(false)}>
+        <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-6xl mx-auto" style={{ minHeight: '70vh' }}>
+          <div className="flex justify-end mb-4">
+            <label className="flex items-center gap-2 text-blue-700 font-semibold cursor-pointer">
+              <input type="checkbox" checked={showAllDays} onChange={e => setShowAllDays(e.target.checked)} />
+              Show all days of month
+            </label>
+          </div>
+          <h2 className="text-2xl font-bold mb-6 text-blue-700 tracking-wide">Total by Category</h2>
+          <div className="mb-8 flex gap-8 w-full justify-center">
+            <div>
+              <label className="block text-sm font-semibold mb-2 text-gray-700">Month</label>
+              <select
+                className="border-2 border-blue-200 rounded-xl px-4 py-2 w-40 focus:outline-blue-400 text-lg bg-gray-50"
+                value={totalMonth}
+                onChange={e => setTotalMonth(e.target.value)}
+              >
+                {months.map(m => <option key={m}>{m}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-semibold mb-2 text-gray-700">Date</label>
+              <input
+                type="date"
+                className="border-2 border-blue-200 rounded-xl px-4 py-2 w-40 focus:outline-blue-400 text-lg bg-gray-50"
+                value={totalDate}
+                onChange={e => setTotalDate(e.target.value)}
+              />
+            </div>
+            <button
+              className="bg-gradient-to-r from-blue-500 to-blue-700 text-white px-8 py-2 rounded-xl font-bold shadow hover:from-blue-600 hover:to-blue-800 transition-all duration-200 self-end mt-6"
+              onClick={() => {
+                // If expenses is an array of {cat, data}, aggregate from there
+                if (Array.isArray(expenses) && expenses.length && expenses[0].cat && expenses[0].data) {
+                  const catTotals = {};
+                  categories.filter(cat => cat !== 'Total').forEach(cat => { catTotals[cat] = 0; });
+                  expenses.forEach(({ cat, data }) => {
+                    if (!catTotals.hasOwnProperty(cat)) return;
+                    let filtered = data;
+                    if (totalMonth) {
+                      filtered = filtered.filter(exp => exp.month === totalMonth);
+                    }
+                    if (totalDate) {
+                      filtered = filtered.filter(exp => exp.date && new Date(exp.date).toISOString().slice(0,10) === totalDate);
+                    }
+                    catTotals[cat] += filtered.reduce((acc, exp) => acc + (exp.amount || 0), 0);
+                  });
+                  setTotalAmount(catTotals);
+                  return;
+                }
+                // Otherwise, fallback to API
+                (async () => {
+                  let url = `/api/expenses/all/${totalMonth}`;
+                  try {
+                    const res = await axios.get(url);
+                    let filtered = res.data;
+                    if (totalDate) {
+                      filtered = filtered.filter(exp => exp.date && new Date(exp.date).toISOString().slice(0,10) === totalDate);
+                    }
+                    const catTotals = {};
+                    categories.filter(cat => cat !== 'Total').forEach(cat => { catTotals[cat] = 0; });
+                    filtered.forEach(exp => {
+                      const cat = categories.find(c => c.toLowerCase() === exp.category.toLowerCase());
+                      if (cat) catTotals[cat] += exp.amount || 0;
+                    });
+                    setTotalAmount(catTotals);
+                  } catch {
+                    setTotalAmount({});
+                  }
+                })();
+              }}
+            >Show Table</button>
+          </div>
+          {showAllDays && totalMonth && (
+            <AllDaysTable
+              categories={categories.filter(cat => cat !== 'Total')}
+              month={totalMonth}
+              expenses={expenses}
+            />
+          )}
+          {!showAllDays && totalAmount && typeof totalAmount === 'object' && Object.keys(totalAmount).length > 0 && (
+            <div className="overflow-x-auto w-full mt-6">
+              <table className="min-w-full border border-blue-200 rounded-xl shadow">
+                <thead className="bg-blue-50">
+                  <tr>
+                    {categories.filter(cat => cat !== 'Total').map(cat => (
+                      <th key={cat} className="border px-4 py-2 text-blue-700 font-semibold text-base">{cat}</th>
+                    ))}
+                    <th className="border px-4 py-2 bg-blue-100 text-blue-900 font-bold text-base">Total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr className="bg-white hover:bg-blue-50">
+                    {categories.filter(cat => cat !== 'Total').map(cat => (
+                      <td key={cat} className="border px-4 py-2 text-right text-gray-800 font-medium">{totalAmount[cat]?.toFixed(2) || '0.00'}</td>
+                    ))}
+                    <td className="border px-4 py-2 text-right font-bold bg-blue-100 text-blue-900">{Object.values(totalAmount).reduce((a,b)=>a+b,0).toFixed(2)}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          )}
+          {/* AllDaysTable is defined below, outside JSX */}
+        </div>
+      </Modal>
+    </>
+  );
+}
 
 // Table for all days of the month with category totals
 function AllDaysTable({ categories, month, expenses }) {
@@ -214,53 +395,11 @@ export default function App() {
       .catch(() => setBranches([]));
   }, []);
 
-  // Test API connection and load initial data on startup
-  useEffect(() => {
-    // First test basic backend connection
-    axios.get('/api/test')
-      .then(res => {
-        // If backend is working, trigger initial load by toggling reload
-        if (res.data.status === 'Database connected') {
-          setReload(prev => !prev);
-        }
-      })
-      .catch(err => {
-        console.error('Backend Test - Error:', err.message);
-        console.error('Backend Test - Error details:', err.response?.data || err.message);
-        console.error('Backend Test - Error status:', err.response?.status);
-      });
-  }, []);
-
-  // Load expenses data - Combined single effect
-  useEffect(() => {
-    const loadExpenses = async () => {
-      try {
-        // Load all expenses from API
-        const allResponse = await axios.get('/api/expenses/all');
-        
-        if (allResponse.data && allResponse.data.length >= 0) {
-          setExpenses(allResponse.data);
-        } else {
-          setExpenses([]);
-        }
-      } catch (err) {
-        console.error('Error loading expenses:', err);
-        console.error('Error details:', err.response?.data || err.message);
-        console.error('Error status:', err.response?.status);
-        setExpenses([]);
-      }
-    };
-
-    loadExpenses();
-  }, [reload]); // Only depend on reload, not selectedMonth
-
-
   return (
     <BrowserRouter>
       <div className="flex min-h-screen bg-gray-100">
-        <Sidebar categories={categories} selected={selectedCategory} onSelect={setSelectedCategory} />
-        <Header />
-        <div className="flex-1 pt-16">
+        <Sidebar categories={categories} selected={selectedCategory} onSelect={setSelectedCategory} branches={branches} />
+        <div className="flex-1">
           <Routes>
             <Route path="/" element={
               <MainContent
@@ -289,36 +428,15 @@ export default function App() {
               <BranchesListPage branches={branches} setBranches={setBranches} />
             } />
             <Route path="/branches/:branchId" element={<BranchPage />} />
-            <Route path="/branches/loans" element={
-              <div className="flex min-h-screen bg-gray-100">
-                <Sidebar categories={categories} selected="Branches" onSelect={setSelectedCategory} branches={branches} />
-                <LoansToCustomerPage branches={branches} />
-              </div>
-            } />
             <Route path="/indirect" element={
-              <div className="flex min-h-screen bg-gray-100">
-                <Sidebar categories={categories} selected="Indirect Exp" onSelect={setSelectedCategory} branches={branches} />
-                <CategoryManager
-                  categories={categories}
-                  setCategories={setCategories}
-                  expenses={expenses}
-                  months={months}
-                  selectedMonth={selectedMonth}
-                  setReload={setReload}
-                />
-              </div>
-            } />
-            <Route path="/customer-expenses" element={
-              <div className="flex min-h-screen bg-gray-100">
-                <Sidebar categories={categories} selected="Indirect Exp" onSelect={setSelectedCategory} branches={branches} />
-                <CustomerExpensesPage categories={categories} />
-              </div>
-            } />
-            <Route path="/employee-master" element={
-              <div className="flex min-h-screen bg-gray-100">
-                <Sidebar categories={categories} selected="Indirect Exp" onSelect={setSelectedCategory} branches={branches} />
-                <EmployeeMasterPage categories={categories} />
-              </div>
+              <CategoryManager
+                categories={categories}
+                setCategories={setCategories}
+                expenses={expenses}
+                months={months}
+                selectedMonth={selectedMonth}
+                setReload={setReload}
+              />
             } />
           </Routes>
         </div>
