@@ -104,35 +104,23 @@ export default function App() {
             } />
             <Route path="/branches/:branchId" element={<BranchPage />} />
             <Route path="/branches/loans" element={
-              <div className="flex min-h-screen bg-gray-100">
-                <Sidebar categories={categories} selected="Branches" onSelect={setSelectedCategory} branches={branches} />
-                <LoansToCustomerPage branches={branches} />
-              </div>
+              <LoansToCustomerPage branches={branches} />
             } />
             <Route path="/indirect" element={
-              <div className="flex min-h-screen bg-gray-100">
-                <Sidebar categories={categories} selected="Indirect Exp" onSelect={setSelectedCategory} branches={branches} />
-                <CategoryManager
-                  categories={categories}
-                  setCategories={setCategories}
-                  expenses={expenses}
-                  months={months}
-                  selectedMonth={selectedMonth}
-                  setReload={setReload}
-                />
-              </div>
+              <CategoryManager
+                categories={categories}
+                setCategories={setCategories}
+                expenses={expenses}
+                months={months}
+                selectedMonth={selectedMonth}
+                setReload={setReload}
+              />
             } />
             <Route path="/customer-expenses" element={
-              <div className="flex min-h-screen bg-gray-100">
-                <Sidebar categories={categories} selected="Indirect Exp" onSelect={setSelectedCategory} branches={branches} />
-                <CustomerExpensesPage categories={categories} />
-              </div>
+              <CustomerExpensesPage categories={categories} />
             } />
             <Route path="/employee-master" element={
-              <div className="flex min-h-screen bg-gray-100">
-                <Sidebar categories={categories} selected="Indirect Exp" onSelect={setSelectedCategory} branches={branches} />
-                <EmployeeMasterPage categories={categories} />
-              </div>
+              <EmployeeMasterPage categories={categories} />
             } />
           </Routes>
         </div>

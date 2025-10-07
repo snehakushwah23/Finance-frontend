@@ -11,7 +11,7 @@ export default function Sidebar({ categories, selected, onSelect, branches }) {
       <div className="p-4 font-bold text-lg border-b">Finance Manager</div>
       <nav className="flex-1 overflow-y-auto">
         
-        {/* Indirect Exp - Collapsible with categories */}
+        {/* Indirect Exp - Collapsible */}
         <button
           className={`w-full flex items-center justify-between text-left px-4 py-2 hover:bg-gray-100 ${indirectOpen ? 'bg-gray-100 font-bold' : ''}`}
           onClick={() => setIndirectOpen(prev => !prev)}
@@ -19,56 +19,31 @@ export default function Sidebar({ categories, selected, onSelect, branches }) {
           <span>Indirect Exp</span>
           <span className={`transition-transform duration-200 ${indirectOpen ? 'rotate-90' : ''}`}>▶</span>
         </button>
-        
+
         {indirectOpen && (
           <div className="ml-4 bg-gray-50">
+            {/* Categories Manager */}
+            <button
+              className="w-full text-left px-4 py-2 hover:bg-blue-50 text-sm font-semibold"
+              onClick={() => navigate('/indirect')}
+            >
+              Categories
+            </button>
+
             {/* Employee Expenses */}
             <button
               className="w-full text-left px-4 py-2 hover:bg-blue-50 text-sm"
-              onClick={() => navigate('/employee-master')}
+              onClick={() => navigate('/customer-expenses')}
             >
               Employee Expenses
             </button>
-            
+
             {/* Employee Master */}
             <button
               className="w-full text-left px-4 py-2 hover:bg-blue-50 text-sm"
               onClick={() => navigate('/employee-master')}
             >
               Employee Master
-            </button>
-            
-            {/* Customer Expenses */}
-            <button
-              className="w-full text-left px-4 py-2 hover:bg-blue-50 text-sm"
-              onClick={() => navigate('/customer-expenses')}
-            >
-              Customer Expenses
-            </button>
-            
-            {/* All Categories */}
-            {categories && categories.filter(cat => cat !== 'Total' && cat !== 'Indirect Exp').map(cat => (
-              <button
-                key={cat}
-                className={`w-full text-left px-4 py-2 hover:bg-blue-50 text-sm ${selected === cat ? 'bg-blue-100 font-semibold' : ''}`}
-                onClick={() => {
-                  onSelect(cat);
-                  navigate('/');
-                }}
-              >
-                {cat}
-              </button>
-            ))}
-            
-            {/* Total */}
-            <button
-              className={`w-full text-left px-4 py-2 hover:bg-blue-50 text-sm font-semibold ${selected === 'Total' ? 'bg-blue-100' : ''}`}
-              onClick={() => {
-                onSelect('Total');
-                navigate('/');
-              }}
-            >
-              Total
             </button>
           </div>
         )}
