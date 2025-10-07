@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import Modal from './Modal';
+import { api } from '../config/api';
 
 function EmployeeMasterPage({ categories = [] }) {
   const [employeeExpenses, setEmployeeExpenses] = useState([]);
@@ -46,7 +47,7 @@ function EmployeeMasterPage({ categories = [] }) {
   const loadEmployeeExpenses = async () => {
     try {
       setLoading(true);
-      const response = await axios.get('/api/customer-expenses');
+      const response = await axios.get(api.get('/api/customer-expenses'));
       // Sort by date descending (newest first)
       const sortedExpenses = response.data.sort((a, b) => new Date(b.date) - new Date(a.date));
       setEmployeeExpenses(sortedExpenses);
