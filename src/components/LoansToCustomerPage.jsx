@@ -42,7 +42,7 @@ export default function LoansToCustomerPage({ branches = [] }) {
       if (!selectedBranch) return;
       setLoading(true);
       try {
-        const res = await axios.get(`/api/branch-entries/${selectedBranch.toLowerCase()}`);
+        const res = await axios.get(api.get(`/api/branch-entries/${selectedBranch.toLowerCase()}`));
         setEntries(res.data || []);
         // Extract unique customers from loan entries (not payments)
         const customers = [...new Set(
@@ -96,7 +96,7 @@ export default function LoansToCustomerPage({ branches = [] }) {
     }
     try {
       const payload = { ...form, branch: selectedBranch.toLowerCase() };
-      await axios.put(`/api/branch-entries/${editingEntry._id}`, payload);
+      await axios.put(api.put(`/api/branch-entries/${editingEntry._id}`), payload);
       setEditOpen(false);
       setEditingEntry(null);
       setForm({ date: '', customer: '', place: '', mobile: '', loan: '', interest: '', emi: '' });
@@ -113,7 +113,7 @@ export default function LoansToCustomerPage({ branches = [] }) {
       return;
     }
     try {
-      await axios.delete(`/api/branch-entries/${id}`);
+      await axios.delete(api.delete(`/api/branch-entries/${id}`));
       // Reload list
       const res = await axios.get(`/api/branch-entries/${selectedBranch.toLowerCase()}`);
       setEntries(res.data || []);
@@ -173,7 +173,7 @@ export default function LoansToCustomerPage({ branches = [] }) {
       alert('Payment recorded successfully');
       // Reload entries if current branch matches
       if (selectedBranch.toLowerCase() === paymentForm.branch.toLowerCase()) {
-        const res = await axios.get(`/api/branch-entries/${selectedBranch.toLowerCase()}`);
+        const res = await axios.get(api.get(`/api/branch-entries/${selectedBranch.toLowerCase()}`));
         setEntries(res.data || []);
       }
     } catch (e) {
@@ -183,7 +183,7 @@ export default function LoansToCustomerPage({ branches = [] }) {
 
   async function loadCustomerPayments(customer, branch) {
     try {
-      const res = await axios.get(`/api/branch-entries/${branch.toLowerCase()}`);
+      const res = await axios.get(api.get(`/api/branch-entries/${branch.toLowerCase()}`));
       // Filter payment entries for this customer
       const payments = (res.data || []).filter(entry => 
         entry.customer === customer && 
