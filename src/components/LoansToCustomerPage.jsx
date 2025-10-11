@@ -597,27 +597,39 @@ export default function LoansToCustomerPage({ branches = [] }) {
 
       {/* Customer Details Modal */}
       <Modal open={detailsOpen} onClose={closeModals}>
-        <div className="bg-white rounded-2xl shadow-2xl p-6 mx-auto" style={{ width: '900px', maxWidth: '90vw' }}>
-          <h2 className="text-xl font-bold mb-4 text-blue-700">
-            Customer Profile - {selectedCustomer?.customer}
-          </h2>
-          <p className="text-gray-600 mb-4">
-            Branch: {selectedBranch} | Mobile: {selectedCustomer?.mobile}
-          </p>
+        <div className="bg-white rounded-2xl shadow-2xl p-8 mx-auto" style={{ width: '1000px', maxWidth: '95vw', maxHeight: '90vh', overflowY: 'auto' }}>
+          <div className="flex justify-between items-start mb-6">
+            <div>
+              <h2 className="text-2xl font-bold mb-2 text-blue-700">
+                Customer Profile - {selectedCustomer?.customer}
+              </h2>
+              <p className="text-gray-600 text-lg">
+                Branch: <span className="font-semibold">{selectedBranch}</span> | Mobile: <span className="font-semibold">{selectedCustomer?.mobile}</span>
+              </p>
+            </div>
+            <button
+              onClick={closeModals}
+              className="text-gray-400 hover:text-gray-600 transition-colors"
+            >
+              <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
           
           {/* Customer Loan Information */}
-          <div className="mb-6">
-            <h3 className="text-lg font-semibold text-gray-700 mb-3">Loan Information</h3>
+          <div className="mb-8">
+            <h3 className="text-xl font-bold text-gray-800 mb-4">Loan Information</h3>
             <div className="overflow-x-auto">
               <table className="w-full border-collapse border border-gray-300">
                 <thead className="bg-blue-50">
                   <tr>
-                    <th className="border border-gray-300 px-4 py-3 text-left font-semibold text-gray-700">Loan #</th>
-                    <th className="border border-gray-300 px-4 py-3 text-left font-semibold text-gray-700">Date</th>
-                    <th className="border border-gray-300 px-4 py-3 text-left font-semibold text-gray-700">Place</th>
-                    <th className="border border-gray-300 px-4 py-3 text-right font-semibold text-gray-700">Loan Amount (₹)</th>
-                    <th className="border border-gray-300 px-4 py-3 text-right font-semibold text-gray-700">Interest (₹)</th>
-                    <th className="border border-gray-300 px-4 py-3 text-right font-semibold text-gray-700">EMI (₹)</th>
+                    <th className="border border-gray-300 px-6 py-4 text-left font-bold text-gray-700 text-base">Loan #</th>
+                    <th className="border border-gray-300 px-6 py-4 text-left font-bold text-gray-700 text-base">Date</th>
+                    <th className="border border-gray-300 px-6 py-4 text-left font-bold text-gray-700 text-base">Place</th>
+                    <th className="border border-gray-300 px-6 py-4 text-right font-bold text-gray-700 text-base">Loan Amount (₹)</th>
+                    <th className="border border-gray-300 px-6 py-4 text-right font-bold text-gray-700 text-base">Interest (₹)</th>
+                    <th className="border border-gray-300 px-6 py-4 text-right font-bold text-gray-700 text-base">EMI (₹)</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -626,16 +638,16 @@ export default function LoansToCustomerPage({ branches = [] }) {
                     .sort((a, b) => new Date(a.date) - new Date(b.date))
                     .map((loan, index) => (
                       <tr key={loan._id} className="hover:bg-gray-50">
-                        <td className="border border-gray-300 px-4 py-3">
-                          <span className="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded-full font-medium">
+                        <td className="border border-gray-300 px-6 py-4">
+                          <span className="bg-blue-100 text-blue-800 text-sm px-3 py-1.5 rounded-full font-semibold">
                             {index + 1 === 1 ? '1st' : index + 1 === 2 ? '2nd' : index + 1 === 3 ? '3rd' : `${index + 1}th`} loan
                           </span>
                         </td>
-                        <td className="border border-gray-300 px-4 py-3">{loan.date ? new Date(loan.date).toLocaleDateString() : ''}</td>
-                        <td className="border border-gray-300 px-4 py-3">{loan.place}</td>
-                        <td className="border border-gray-300 px-4 py-3 text-right font-medium">₹{Number(loan.loan).toLocaleString()}</td>
-                        <td className="border border-gray-300 px-4 py-3 text-right font-medium">₹{Number(loan.interest).toLocaleString()}</td>
-                        <td className="border border-gray-300 px-4 py-3 text-right font-medium">₹{Number(loan.emi).toLocaleString()}</td>
+                        <td className="border border-gray-300 px-6 py-4 text-base">{loan.date ? new Date(loan.date).toLocaleDateString() : ''}</td>
+                        <td className="border border-gray-300 px-6 py-4 text-base">{loan.place}</td>
+                        <td className="border border-gray-300 px-6 py-4 text-right font-semibold text-base text-gray-900">₹{Number(loan.loan).toLocaleString()}</td>
+                        <td className="border border-gray-300 px-6 py-4 text-right font-semibold text-base text-gray-900">₹{Number(loan.interest).toLocaleString()}</td>
+                        <td className="border border-gray-300 px-6 py-4 text-right font-semibold text-base text-gray-900">₹{Number(loan.emi).toLocaleString()}</td>
                       </tr>
                     ))}
                 </tbody>
@@ -645,7 +657,7 @@ export default function LoansToCustomerPage({ branches = [] }) {
           
           {/* Payment History */}
           <div>
-            <h3 className="text-lg font-semibold text-gray-700 mb-3">Payment History</h3>
+            <h3 className="text-xl font-bold text-gray-800 mb-4">Payment History</h3>
             
             {customerPayments.length === 0 ? (
               <div className="text-center py-8 text-gray-500">No payments found for this customer</div>
@@ -670,44 +682,44 @@ export default function LoansToCustomerPage({ branches = [] }) {
                   className={`payment-history-scroll ${customerPayments.length > 3 ? 'max-h-64 overflow-y-auto' : ''}`}
                   style={{ scrollbarWidth: 'thin', scrollbarColor: '#9ca3af #f3f4f6' }}
                 >
-                <table className="w-full border-collapse border border-gray-300">
-                    <thead className="bg-blue-50 sticky top-0">
-                    <tr>
-                      <th className="border border-gray-300 px-4 py-3 text-left font-semibold text-gray-700">Payment Date</th>
-                      <th className="border border-gray-300 px-4 py-3 text-right font-semibold text-gray-700">Amount (₹)</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {customerPayments.map((payment, index) => (
-                      <tr key={index} className="hover:bg-gray-50">
-                        <td className="border border-gray-300 px-4 py-3">
-                          {new Date(payment.date).toLocaleDateString()}
+                  <table className="w-full border-collapse border border-gray-300">
+                    <thead className="bg-green-50 sticky top-0">
+                      <tr>
+                        <th className="border border-gray-300 px-6 py-4 text-left font-bold text-gray-700 text-base">Payment Date</th>
+                        <th className="border border-gray-300 px-6 py-4 text-right font-bold text-gray-700 text-base">Amount (₹)</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {customerPayments.map((payment, index) => (
+                        <tr key={index} className="hover:bg-gray-50">
+                          <td className="border border-gray-300 px-6 py-4 text-base">
+                            {new Date(payment.date).toLocaleDateString()}
+                          </td>
+                          <td className="border border-gray-300 px-6 py-4 text-right font-semibold text-base text-green-700">
+                            ₹{Number(payment.loan).toLocaleString()}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                    <tfoot className="bg-green-100 sticky bottom-0">
+                      <tr>
+                        <td className="border border-gray-300 px-6 py-4 font-bold text-gray-800 text-base">
+                          Total Paid:
                         </td>
-                        <td className="border border-gray-300 px-4 py-3 text-right font-medium">
-                          ₹{Number(payment.loan).toLocaleString()}
+                        <td className="border border-gray-300 px-6 py-4 text-right font-bold text-green-700 text-lg">
+                          ₹{customerPayments.reduce((sum, payment) => sum + Number(payment.loan), 0).toLocaleString()}
                         </td>
                       </tr>
-                    ))}
-                  </tbody>
-                    <tfoot className="bg-green-50 sticky bottom-0">
-                    <tr>
-                      <td className="border border-gray-300 px-4 py-3 font-bold text-gray-700">
-                        Total Paid:
-                      </td>
-                      <td className="border border-gray-300 px-4 py-3 text-right font-bold text-green-600">
-                        ₹{customerPayments.reduce((sum, payment) => sum + Number(payment.loan), 0).toLocaleString()}
-                      </td>
-                    </tr>
-                  </tfoot>
-                </table>
+                    </tfoot>
+                  </table>
               </div>
               </>
             )}
           </div>
           
-          <div className="flex justify-end mt-6">
+          <div className="flex justify-end mt-8 pt-6 border-t border-gray-200">
             <button
-              className="bg-gray-500 text-white px-6 py-2 rounded-lg font-semibold hover:bg-gray-600 transition-colors"
+              className="bg-gray-600 text-white px-8 py-3 rounded-lg font-semibold hover:bg-gray-700 transition-colors text-base"
               onClick={closeModals}
             >
               Close

@@ -112,15 +112,6 @@ export default function Sidebar({ categories, selected, onSelect, onLogout }) {
                 className="w-full text-left px-4 py-2 hover:bg-gray-100 text-sm text-gray-600"
                 onClick={(e) => {
                   e.stopPropagation();
-                  navigate('/customer-expenses');
-                }}
-              >
-                Employee Expenses
-              </button>
-              <button
-                className="w-full text-left px-4 py-2 hover:bg-gray-100 text-sm text-gray-600"
-                onClick={(e) => {
-                  e.stopPropagation();
                   navigate('/employee-master');
                 }}
               >
