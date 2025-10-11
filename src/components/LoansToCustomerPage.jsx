@@ -650,9 +650,28 @@ export default function LoansToCustomerPage({ branches = [] }) {
             {customerPayments.length === 0 ? (
               <div className="text-center py-8 text-gray-500">No payments found for this customer</div>
             ) : (
-              <div className="overflow-x-auto">
+              <>
+                <style>{`
+                  .payment-history-scroll::-webkit-scrollbar {
+                    width: 6px;
+                  }
+                  .payment-history-scroll::-webkit-scrollbar-track {
+                    background: #f3f4f6;
+                  }
+                  .payment-history-scroll::-webkit-scrollbar-thumb {
+                    background: #9ca3af;
+                    border-radius: 3px;
+                  }
+                  .payment-history-scroll::-webkit-scrollbar-thumb:hover {
+                    background: #6b7280;
+                  }
+                `}</style>
+                <div 
+                  className={`payment-history-scroll ${customerPayments.length > 3 ? 'max-h-64 overflow-y-auto' : ''}`}
+                  style={{ scrollbarWidth: 'thin', scrollbarColor: '#9ca3af #f3f4f6' }}
+                >
                 <table className="w-full border-collapse border border-gray-300">
-                  <thead className="bg-blue-50">
+                    <thead className="bg-blue-50 sticky top-0">
                     <tr>
                       <th className="border border-gray-300 px-4 py-3 text-left font-semibold text-gray-700">Payment Date</th>
                       <th className="border border-gray-300 px-4 py-3 text-right font-semibold text-gray-700">Amount (₹)</th>
@@ -670,7 +689,7 @@ export default function LoansToCustomerPage({ branches = [] }) {
                       </tr>
                     ))}
                   </tbody>
-                  <tfoot className="bg-green-50">
+                    <tfoot className="bg-green-50 sticky bottom-0">
                     <tr>
                       <td className="border border-gray-300 px-4 py-3 font-bold text-gray-700">
                         Total Paid:
@@ -682,6 +701,7 @@ export default function LoansToCustomerPage({ branches = [] }) {
                   </tfoot>
                 </table>
               </div>
+              </>
             )}
           </div>
           

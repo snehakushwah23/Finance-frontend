@@ -13,6 +13,10 @@ function EmployeeMasterPage({ categories = [] }) {
   const [selectedExpense, setSelectedExpense] = useState(null);
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [editingExpense, setEditingExpense] = useState(null);
+  const [addModalOpen, setAddModalOpen] = useState(false);
+  const [employeeHistoryModal, setEmployeeHistoryModal] = useState(false);
+  const [selectedEmployeeName, setSelectedEmployeeName] = useState('');
+  const [employeeHistory, setEmployeeHistory] = useState([]);
   const [formData, setFormData] = useState({
     customerName: '',
     date: '',
@@ -62,6 +66,17 @@ function EmployeeMasterPage({ categories = [] }) {
   const handleExpenseClick = (expense) => {
     setSelectedExpense(expense);
     setDetailModalOpen(true);
+  };
+
+  const handleViewEmployeeHistory = (employeeName) => {
+    // Filter all expenses for this employee
+    const history = employeeExpenses.filter(exp => exp.customerName === employeeName);
+    // Sort by date descending (newest first)
+    const sortedHistory = history.sort((a, b) => new Date(b.date) - new Date(a.date));
+    
+    setSelectedEmployeeName(employeeName);
+    setEmployeeHistory(sortedHistory);
+    setEmployeeHistoryModal(true);
   };
 
   const handleEdit = (expense) => {
@@ -125,11 +140,38 @@ function EmployeeMasterPage({ categories = [] }) {
     }
   };
 
+  const handleAddExpense = async (e) => {
+    e.preventDefault();
+    
+    if (!formData.customerName || !formData.date || !formData.amount || !formData.category) {
+      alert('Please fill in all required fields');
+      return;
+    }
+
+    try {
+      setLoading(true);
+      await axios.post('/api/customer-expenses', formData);
+      await loadEmployeeExpenses(); // Reload the list
+      setAddModalOpen(false);
+      setFormData({ customerName: '', date: '', amount: '', category: '' });
+      alert('Employee expense added successfully');
+    } catch (error) {
+      console.error('Error adding employee expense:', error);
+      alert('Error adding employee expense');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const closeModals = () => {
     setDetailModalOpen(false);
     setEditModalOpen(false);
+    setAddModalOpen(false);
+    setEmployeeHistoryModal(false);
     setSelectedExpense(null);
     setEditingExpense(null);
+    setSelectedEmployeeName('');
+    setEmployeeHistory([]);
     setFormData({ customerName: '', date: '', amount: '', category: '' });
   };
 
@@ -148,6 +190,25 @@ function EmployeeMasterPage({ categories = [] }) {
       <div className="bg-white rounded-2xl shadow p-6 mb-6 border border-gray-200">
         <div className="flex justify-between items-center mb-6">
           <h1 className="text-2xl font-bold text-gray-800">Employee Master</h1>
+          <button
+            className="bg-blue-600 text-white px-6 py-2 rounded-lg font-semibold hover:bg-blue-700 transition-colors flex items-center gap-2"
+            onClick={() => setAddModalOpen(true)}
+          >
+            <svg 
+              className="w-5 h-5" 
+              fill="none" 
+              stroke="currentColor" 
+              viewBox="0 0 24 24"
+            >
+              <path 
+                strokeLinecap="round" 
+                strokeLinejoin="round" 
+                strokeWidth={2} 
+                d="M12 6v6m0 0v6m0-6h6m-6 0H6" 
+              />
+            </svg>
+            Add Employee Expense
+          </button>
         </div>
 
         {/* Filters */}
@@ -261,9 +322,9 @@ function EmployeeMasterPage({ categories = [] }) {
                           className="p-1 hover:bg-blue-200 rounded-full transition-colors"
                           onClick={(e) => {
                             e.stopPropagation();
-                            handleExpenseClick(expense);
+                            handleViewEmployeeHistory(expense.customerName);
                           }}
-                          title="View details"
+                          title="View employee history"
                         >
                           <svg 
                             className="w-4 h-4 text-blue-600 hover:text-blue-800" 
@@ -465,6 +526,207 @@ function EmployeeMasterPage({ categories = [] }) {
               </button>
             </div>
           </form>
+        </div>
+      </Modal>
+
+      {/* Add Employee Expense Modal */}
+      <Modal open={addModalOpen} onClose={closeModals}>
+        <div className="bg-white rounded-2xl shadow-2xl p-6 mx-auto" style={{ width: '600px', maxWidth: '90vw' }}>
+          <h2 className="text-xl font-bold mb-4 text-blue-700">Add Employee Expense</h2>
+          <form onSubmit={handleAddExpense}>
+            <div className="grid grid-cols-1 gap-4">
+              <div>
+                <label className="block text-sm font-semibold mb-1.5 text-gray-700">Employee Name *</label>
+                <input
+                  type="text"
+                  name="customerName"
+                  className="border rounded-lg px-3 py-2 w-full focus:outline-none focus:ring-2 focus:ring-blue-400"
+                  value={formData.customerName}
+                  onChange={handleInputChange}
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-semibold mb-1.5 text-gray-700">Date *</label>
+                <input
+                  type="date"
+                  name="date"
+                  className="border rounded-lg px-3 py-2 w-full focus:outline-none focus:ring-2 focus:ring-blue-400"
+                  value={formData.date}
+                  onChange={handleInputChange}
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-semibold mb-1.5 text-gray-700">Amount (₹) *</label>
+                <input
+                  type="number"
+                  name="amount"
+                  className="border rounded-lg px-3 py-2 w-full focus:outline-none focus:ring-2 focus:ring-blue-400"
+                  value={formData.amount}
+                  onChange={handleInputChange}
+                  min="0"
+                  step="0.01"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-semibold mb-1.5 text-gray-700">Category *</label>
+                <select
+                  name="category"
+                  className="border rounded-lg px-3 py-2 w-full focus:outline-none focus:ring-2 focus:ring-blue-400"
+                  value={formData.category}
+                  onChange={handleInputChange}
+                  required
+                >
+                  <option value="">Select Category</option>
+                  {categories.filter(cat => cat !== 'Total' && cat !== 'Indirect Exp').map(category => (
+                    <option key={category} value={category}>{category}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            <div className="flex gap-4 mt-6">
+              <button
+                type="submit"
+                className="bg-blue-600 text-white px-6 py-3 rounded-lg font-semibold flex-1 hover:bg-blue-700 transition-colors"
+                disabled={loading}
+              >
+                {loading ? 'Adding...' : 'Add Employee Expense'}
+              </button>
+              <button
+                type="button"
+                className="bg-gray-400 text-white px-6 py-3 rounded-lg font-semibold flex-1 hover:bg-gray-500 transition-colors"
+                onClick={closeModals}
+              >
+                Cancel
+              </button>
+            </div>
+          </form>
+        </div>
+      </Modal>
+
+      {/* Employee History Modal */}
+      <Modal open={employeeHistoryModal} onClose={closeModals}>
+        <div className="bg-white rounded-2xl shadow-2xl p-6 mx-auto" style={{ width: '800px', maxWidth: '95vw' }}>
+          <div className="flex justify-between items-center mb-6">
+            <h2 className="text-2xl font-bold text-blue-700">Employee Expense History</h2>
+            <button
+              onClick={closeModals}
+              className="text-gray-500 hover:text-gray-700 transition-colors"
+            >
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+
+          {/* Employee Summary */}
+          <div className="bg-gradient-to-r from-blue-50 to-indigo-50 p-6 rounded-xl mb-6 border border-blue-200">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div>
+                <label className="block text-sm font-semibold text-blue-600 mb-1">Employee Name</label>
+                <p className="text-2xl font-bold text-gray-800">{selectedEmployeeName}</p>
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-blue-600 mb-1">Total Expenses</label>
+                <p className="text-2xl font-bold text-green-600">
+                  ₹{employeeHistory.reduce((sum, exp) => sum + Number(exp.amount), 0).toLocaleString('en-IN')}
+                </p>
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-blue-600 mb-1">Total Transactions</label>
+                <p className="text-2xl font-bold text-purple-600">{employeeHistory.length}</p>
+              </div>
+            </div>
+          </div>
+
+          {/* History Table */}
+          <style>{`
+            .history-scroll::-webkit-scrollbar {
+              width: 6px;
+            }
+            .history-scroll::-webkit-scrollbar-track {
+              background: #f3f4f6;
+            }
+            .history-scroll::-webkit-scrollbar-thumb {
+              background: #9ca3af;
+              border-radius: 3px;
+            }
+            .history-scroll::-webkit-scrollbar-thumb:hover {
+              background: #6b7280;
+            }
+          `}</style>
+          <div 
+            className={`history-scroll ${employeeHistory.length > 3 ? 'max-h-80 overflow-y-auto' : ''}`}
+            style={{ scrollbarWidth: 'thin', scrollbarColor: '#9ca3af #f3f4f6' }}
+          >
+            {employeeHistory.length === 0 ? (
+              <div className="text-center py-8 text-gray-500">No expense history found</div>
+            ) : (
+              <table className="w-full border-collapse">
+                <thead className="bg-blue-100 sticky top-0">
+                  <tr>
+                    <th className="border border-gray-300 px-4 py-3 text-left font-semibold text-gray-700">#</th>
+                    <th className="border border-gray-300 px-4 py-3 text-left font-semibold text-gray-700">Date</th>
+                    <th className="border border-gray-300 px-4 py-3 text-left font-semibold text-gray-700">Category</th>
+                    <th className="border border-gray-300 px-4 py-3 text-right font-semibold text-gray-700">Amount (₹)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {employeeHistory.map((expense, index) => (
+                    <tr key={expense._id} className="hover:bg-gray-50">
+                      <td className="border border-gray-300 px-4 py-3 text-gray-600">{index + 1}</td>
+                      <td className="border border-gray-300 px-4 py-3">
+                        {expense.date ? new Date(expense.date).toLocaleDateString('en-IN', {
+                          day: '2-digit',
+                          month: 'short',
+                          year: 'numeric'
+                        }) : ''}
+                      </td>
+                      <td className="border border-gray-300 px-4 py-3">
+                        <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${
+                          expense.category === 'Travel' ? 'bg-blue-100 text-blue-800' :
+                          expense.category === 'Food' ? 'bg-green-100 text-green-800' :
+                          expense.category === 'Office' ? 'bg-purple-100 text-purple-800' :
+                          expense.category === 'Transport' ? 'bg-yellow-100 text-yellow-800' :
+                          expense.category === 'Medical' ? 'bg-red-100 text-red-800' :
+                          expense.category === 'Entertainment' ? 'bg-pink-100 text-pink-800' :
+                          expense.category === 'Utilities' ? 'bg-indigo-100 text-indigo-800' :
+                          expense.category === 'Other' ? 'bg-gray-100 text-gray-800' :
+                          'bg-orange-100 text-orange-800'
+                        }`}>
+                          {expense.category}
+                        </span>
+                      </td>
+                      <td className="border border-gray-300 px-4 py-3 text-right font-semibold text-gray-800">
+                        ₹{Number(expense.amount).toLocaleString('en-IN')}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot className="bg-blue-50 sticky bottom-0">
+                  <tr>
+                    <td colSpan="3" className="border border-gray-300 px-4 py-3 text-right font-bold text-gray-800">
+                      Total Amount:
+                    </td>
+                    <td className="border border-gray-300 px-4 py-3 text-right font-bold text-green-600">
+                      ₹{employeeHistory.reduce((sum, exp) => sum + Number(exp.amount), 0).toLocaleString('en-IN')}
+                    </td>
+                  </tr>
+                </tfoot>
+              </table>
+            )}
+          </div>
+
+          <div className="flex justify-end mt-6">
+            <button
+              className="bg-gray-500 text-white px-6 py-2 rounded-lg font-semibold hover:bg-gray-600 transition-colors"
+              onClick={closeModals}
+            >
+              Close
+            </button>
+          </div>
         </div>
       </Modal>
     </div>

@@ -19,6 +19,7 @@ import DailyTotals from './components/DailyTotals';
 import CustomerExpensesPage from './components/CustomerExpensesPage';
 import EmployeeMasterPage from './components/EmployeeMasterPage';
 import LoansToCustomerPage from './components/LoansToCustomerPage';
+import Dashboard from './components/Dashboard';
 import Login from './components/Login';
 import axios from 'axios';
 
@@ -286,7 +287,13 @@ export default function App() {
         <Route path="*" element={
           <ProtectedRoute>
             <div className="flex min-h-screen bg-gray-100">
-              <Sidebar categories={categories} selected={selectedCategory} onSelect={setSelectedCategory} branches={branches} />
+              <Sidebar 
+                categories={categories} 
+                selected={selectedCategory} 
+                onSelect={setSelectedCategory} 
+                branches={branches}
+                onLogout={() => setIsLoggedIn(false)}
+              />
               <Header />
               <div className="flex-1 pt-16">
                 <Routes>
@@ -321,6 +328,16 @@ export default function App() {
                     <div className="flex min-h-screen bg-gray-100">
                       <Sidebar categories={categories} selected="Branches" onSelect={setSelectedCategory} branches={branches} />
                       <LoansToCustomerPage branches={branches} />
+                    </div>
+                  } />
+                  <Route path="/dashboard" element={
+                    <div className="flex min-h-screen bg-gray-100">
+                      <Sidebar categories={categories} selected="Dashboard" onSelect={setSelectedCategory} branches={branches} />
+                      <Dashboard 
+                        categories={categories} 
+                        branches={branches}
+                        expenses={expenses}
+                      />
                     </div>
                   } />
                   <Route path="/indirect" element={

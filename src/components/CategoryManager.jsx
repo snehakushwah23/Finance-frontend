@@ -918,9 +918,30 @@ export default function CategoryManager({ categories, setCategories, expenses, m
             }) : ''}
           </p>
           
-          <div className="overflow-x-auto">
+          <style>{`
+            .employee-details-scroll::-webkit-scrollbar {
+              width: 6px;
+            }
+            .employee-details-scroll::-webkit-scrollbar-track {
+              background: #f3f4f6;
+            }
+            .employee-details-scroll::-webkit-scrollbar-thumb {
+              background: #9ca3af;
+              border-radius: 3px;
+            }
+            .employee-details-scroll::-webkit-scrollbar-thumb:hover {
+              background: #6b7280;
+            }
+          `}</style>
+          <div 
+            className="overflow-x-auto max-h-96 overflow-y-auto employee-details-scroll"
+            style={{
+              scrollbarWidth: 'thin',
+              scrollbarColor: '#9ca3af #f3f4f6'
+            }}
+          >
             <table className="w-full border-collapse border border-gray-300">
-              <thead className="bg-blue-50">
+              <thead className="bg-blue-50 sticky top-0">
                 <tr>
                   <th className="border border-gray-300 px-4 py-3 text-left font-semibold text-gray-700">Employee Name</th>
                   <th className="border border-gray-300 px-4 py-3 text-right font-semibold text-gray-700">Amount (₹)</th>
@@ -959,7 +980,7 @@ export default function CategoryManager({ categories, setCategories, expenses, m
                   </tr>
                 ))}
               </tbody>
-              <tfoot className="bg-green-50">
+              <tfoot className="bg-green-50 sticky bottom-0">
                 <tr>
                   <td className="border border-gray-300 px-4 py-3 font-bold text-gray-700">
                     Total:
