@@ -17,10 +17,14 @@ import Modal from './components/Modal';
 import ExpenseEditModal from './components/ExpenseEditModal';
 import DailyTotals from './components/DailyTotals';
 import CustomerExpensesPage from './components/CustomerExpensesPage';
+import EmployeeExpensesPage from './components/EmployeeExpensesPage';
 import EmployeeMasterPage from './components/EmployeeMasterPage';
 import LoansToCustomerPage from './components/LoansToCustomerPage';
 import Dashboard from './components/Dashboard';
 import Login from './components/Login';
+import BranchLogin from './components/BranchLogin';
+import BranchDashboard from './components/BranchDashboard';
+import BranchListPage from './components/BranchListPage';
 import axios from 'axios';
 
 
@@ -283,6 +287,18 @@ export default function App() {
           } 
         />
 
+        {/* Branch Login Route */}
+        <Route 
+          path="/branch-login" 
+          element={<BranchLogin />} 
+        />
+
+        {/* Branch Dashboard Route */}
+        <Route 
+          path="/branch-dashboard/:branchName" 
+          element={<BranchDashboard />} 
+        />
+
         {/* Protected Routes */}
         <Route path="*" element={
           <ProtectedRoute>
@@ -321,7 +337,10 @@ export default function App() {
                     />
                   } />
                   <Route path="/branches" element={
-                    <BranchesListPage branches={branches} setBranches={setBranches} />
+                    <div className="flex min-h-screen bg-gray-100">
+                      <Sidebar categories={categories} selected="Branches" onSelect={setSelectedCategory} branches={branches} />
+                      <BranchesListPage branches={branches} setBranches={setBranches} />
+                    </div>
                   } />
                   <Route path="/branches/:branchId" element={<BranchPage />} />
                   <Route path="/branches/loans" element={
@@ -359,10 +378,22 @@ export default function App() {
                       <CustomerExpensesPage categories={categories} />
                     </div>
                   } />
+                  <Route path="/employee-expenses" element={
+                    <div className="flex min-h-screen bg-gray-100">
+                      <Sidebar categories={categories} selected="Indirect Exp" onSelect={setSelectedCategory} branches={branches} />
+                      <EmployeeExpensesPage categories={categories} />
+                    </div>
+                  } />
                   <Route path="/employee-master" element={
                     <div className="flex min-h-screen bg-gray-100">
                       <Sidebar categories={categories} selected="Indirect Exp" onSelect={setSelectedCategory} branches={branches} />
-                      <EmployeeMasterPage categories={categories} />
+                      <EmployeeMasterPage />
+                    </div>
+                  } />
+                  <Route path="/branch-list" element={
+                    <div className="flex min-h-screen bg-gray-100">
+                      <Sidebar categories={categories} selected="Branches" onSelect={setSelectedCategory} branches={branches} />
+                      <BranchListPage />
                     </div>
                   } />
                 </Routes>

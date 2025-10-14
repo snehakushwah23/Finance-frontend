@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-export default function Sidebar({ categories, selected, onSelect, onLogout }) {
+export default function Sidebar({ categories, selected, onSelect, onLogout, branches = [] }) {
   const navigate = useNavigate();
   const [indirectExpOpen, setIndirectExpOpen] = useState(false);
   const [branchesOpen, setBranchesOpen] = useState(false);
@@ -117,6 +117,15 @@ export default function Sidebar({ categories, selected, onSelect, onLogout }) {
               >
                 Employee Master
               </button>
+              <button
+                className="w-full text-left px-4 py-2 hover:bg-gray-100 text-sm text-gray-600"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  navigate('/employee-expenses');
+                }}
+              >
+                Employee Expenses
+              </button>
             </div>
           )}
         </div>
@@ -150,6 +159,15 @@ export default function Sidebar({ categories, selected, onSelect, onLogout }) {
                 }}
               >
                 Loan to Customer
+              </button>
+              <button
+                className="w-full text-left px-4 py-2 hover:bg-gray-100 text-sm text-gray-600"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  navigate('/branch-list');
+                }}
+              >
+                Branch Login
               </button>
             </div>
           )}
