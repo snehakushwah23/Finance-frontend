@@ -24,6 +24,59 @@ export default function BranchDashboard() {
   const [detailsMode, setDetailsMode] = useState('full'); // 'full' | 'paymentsOnly'
   const [selectedCustomer, setSelectedCustomer] = useState(null);
   const [customerPayments, setCustomerPayments] = useState([]);
+  const [branchExpenses, setBranchExpenses] = useState([]);
+  const [expenseForm, setExpenseForm] = useState({ date: new Date().toISOString().split('T')[0], month: '', category: '', amount: '', description: '' });
+  const [expenseModalOpen, setExpenseModalOpen] = useState(false);
+  const [employees, setEmployees] = useState([]);
+  const [employeeForm, setEmployeeForm] = useState({ name: '', mobile: '', designation: '', department: '', joiningDate: '', salary: '' });
+  const [employeeModalOpen, setEmployeeModalOpen] = useState(false);
+  const [employeeSearch, setEmployeeSearch] = useState('');
+  const [filteredEmployees, setFilteredEmployees] = useState([]);
+  const [employeeDeptFilter, setEmployeeDeptFilter] = useState('');
+  const [employeeDesigFilter, setEmployeeDesigFilter] = useState('');
+  // Category master list (derived + manually addable)
+  const DEFAULT_CATEGORIES = [
+    'Petrol',
+    'Other Exp.',
+    'Hotel Exp',
+    'Office Exp.',
+    'Vehicle Maint.',
+    'Commission',
+    'Office Rent',
+    'Telephone Exp.',
+    'Stationery',
+    'Bank',
+    'Personal Exp.',
+    'House Exp.',
+    'Recvd. Cash',
+    'Vargani',
+    'Salary',
+    'Professional Fees'
+  ];
+  const [categoryMasterCategories, setCategoryMasterCategories] = useState(DEFAULT_CATEGORIES);
+  const [masterCategoryDetail, setMasterCategoryDetail] = useState(null);
+  const [showCatEmpTotals, setShowCatEmpTotals] = useState(false);
+  const [totalsCategory, setTotalsCategory] = useState('All');
+  const [totalsMonth, setTotalsMonth] = useState('');
+  const [totalsDate, setTotalsDate] = useState('');
+  const [totalsViewMode, setTotalsViewMode] = useState('Single Date');
+  const [showEmpTotalsResult, setShowEmpTotalsResult] = useState(false);
+  const [addCategoryOpen, setAddCategoryOpen] = useState(false);
+  const [newCategoryName, setNewCategoryName] = useState('');
+  // Employee expenses (per-branch)
+  const [branchEmployeeExpenses, setBranchEmployeeExpenses] = useState([]);
+  const [filteredBranchEmployeeExpenses, setFilteredBranchEmployeeExpenses] = useState([]);
+  const [empExpCategory, setEmpExpCategory] = useState('');
+  const [empExpDate, setEmpExpDate] = useState('');
+  const [empExpAddOpen, setEmpExpAddOpen] = useState(false);
+  const [empExpEditOpen, setEmpExpEditOpen] = useState(false);
+  const [editingEmpExpense, setEditingEmpExpense] = useState(null);
+  const [empExpenseForm, setEmpExpenseForm] = useState({ employeeName: '', date: new Date().toISOString().split('T')[0], amount: '', category: '' });
+  const [employeeDetailOpen, setEmployeeDetailOpen] = useState(false);
+  const [selectedEmployee, setSelectedEmployee] = useState(null);
+  const [employeeEditOpen, setEmployeeEditOpen] = useState(false);
+  const [editingEmployee, setEditingEmployee] = useState(null);
+  const [employeeEditForm, setEmployeeEditForm] = useState({ name: '', mobile: '', designation: '', department: '', joiningDate: '', salary: '' });
   const [formData, setFormData] = useState({
     date: '',
     customer: '',
@@ -69,6 +122,314 @@ export default function BranchDashboard() {
       setFilteredData([]);
       setAllPayments([]);
       setFilteredPayments([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadBranchExpenses = async () => {
+    try {
+      const res = await axios.get(api.get(`/api/branch-expenses/${branchName.toLowerCase()}`));
+      setBranchExpenses(res.data || []);
+      // derive categories whenever branch expenses fetched
+      const expCats = new Set((res.data || []).map(e => e.category).filter(Boolean));
+      const empCats = new Set((branchEmployeeExpenses || []).map(e => e.category).filter(Boolean));
+      setCategoryMasterCategories(Array.from(new Set([...expCats, ...empCats, ...categoryMasterCategories])));
+    } catch (e) {
+      console.error('Error loading branch expenses:', e);
+      setBranchExpenses([]);
+    }
+  };
+
+  const loadBranchEmployees = async () => {
+    try {
+      const res = await axios.get(api.get(`/api/branch-employees/${branchName.toLowerCase()}`));
+      setEmployees(res.data || []);
+    } catch (e) {
+      console.error('Error loading employees:', e);
+      setEmployees([]);
+    }
+  };
+
+  useEffect(() => {
+    if (selectedView === 'expenses') {
+      loadBranchExpenses();
+    } else if (selectedView === 'employees') {
+      loadBranchEmployees();
+    } else if (selectedView === 'empExpenses') {
+      loadBranchEmployees();
+      loadBranchEmployeeExpenses();
+    } else if (selectedView === 'categoryMaster') {
+      loadBranchExpenses();
+      loadBranchEmployeeExpenses();
+    }
+  }, [selectedView]);
+
+  // Recompute Category Master list when data or view changes
+  useEffect(() => {
+    if (selectedView !== 'categoryMaster') return;
+    const expCats = new Set((branchExpenses || []).map(e => e.category).filter(Boolean));
+    const empCats = new Set((branchEmployeeExpenses || []).map(e => e.category).filter(Boolean));
+    const merged = Array.from(new Set([
+      ...DEFAULT_CATEGORIES,
+      ...Array.from(expCats),
+      ...Array.from(empCats),
+      ...categoryMasterCategories
+    ].filter(Boolean)));
+    setCategoryMasterCategories(merged);
+  }, [selectedView, branchExpenses, branchEmployeeExpenses]);
+
+  // Filter employees by search
+  useEffect(() => {
+    const term = employeeSearch.toLowerCase();
+    const dept = employeeDeptFilter.toLowerCase();
+    const desig = employeeDesigFilter.toLowerCase();
+
+    const next = (employees || []).filter(em => {
+      const matchesSearch = !term ||
+        em?.name?.toLowerCase().includes(term) ||
+        em?.mobile?.toLowerCase?.().includes(term) ||
+        em?.designation?.toLowerCase?.().includes(term) ||
+        em?.department?.toLowerCase?.().includes(term);
+      const matchesDept = !dept || em?.department?.toLowerCase() === dept;
+      const matchesDesig = !desig || em?.designation?.toLowerCase() === desig;
+      return matchesSearch && matchesDept && matchesDesig;
+    });
+    setFilteredEmployees(next);
+  }, [employeeSearch, employees, employeeDeptFilter, employeeDesigFilter]);
+
+  const handleAddExpense = async (e) => {
+    e.preventDefault();
+    if (!expenseForm.category || !expenseForm.amount || !expenseForm.month || !expenseForm.date) {
+      alert('Please fill category, amount, month and date');
+      return;
+    }
+    try {
+      setLoading(true);
+      const payload = {
+        branch: branchName.toLowerCase(),
+        category: expenseForm.category,
+        amount: Number(expenseForm.amount),
+        month: expenseForm.month,
+        description: expenseForm.description || '',
+        date: expenseForm.date
+      };
+      await axios.post(api.post('/api/branch-expenses'), payload);
+      setExpenseForm({ date: new Date().toISOString().split('T')[0], month: '', category: '', amount: '', description: '' });
+      await loadBranchExpenses();
+      alert('Expense added');
+    } catch (err) {
+      console.error('Error adding expense:', err);
+      alert('Error adding expense');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDeleteExpense = async (id) => {
+    if (!window.confirm('Delete this expense?')) return;
+    try {
+      setLoading(true);
+      await axios.delete(api.delete(`/api/branch-expenses/${id}`));
+      await loadBranchExpenses();
+    } catch (e) {
+      alert('Error deleting expense');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Branch Employee Expenses
+  const loadBranchEmployeeExpenses = async () => {
+    try {
+      const res = await axios.get(api.get(`/api/employee-expenses/${branchName.toLowerCase()}`));
+      // newest first
+      const sorted = (res.data || []).sort((a, b) => new Date(b.date) - new Date(a.date));
+      setBranchEmployeeExpenses(sorted);
+      setFilteredBranchEmployeeExpenses(sorted);
+      // derive categories whenever employee expenses fetched
+      const expCats = new Set((branchExpenses || []).map(e => e.category).filter(Boolean));
+      const empCats = new Set(sorted.map(e => e.category).filter(Boolean));
+      setCategoryMasterCategories(Array.from(new Set([...expCats, ...empCats, ...categoryMasterCategories])));
+    } catch (e) {
+      console.error('Error loading employee expenses:', e);
+      setBranchEmployeeExpenses([]);
+      setFilteredBranchEmployeeExpenses([]);
+    }
+  };
+
+  useEffect(() => {
+    let data = branchEmployeeExpenses;
+    if (empExpCategory) data = data.filter(e => e.category === empExpCategory);
+    if (empExpDate) {
+      const d = new Date(empExpDate).toISOString().split('T')[0];
+      data = data.filter(e => new Date(e.date).toISOString().split('T')[0] === d);
+    }
+    setFilteredBranchEmployeeExpenses(data);
+  }, [branchEmployeeExpenses, empExpCategory, empExpDate]);
+
+  const handleEmpExpenseFormChange = (e) => {
+    const { name, value } = e.target;
+    setEmpExpenseForm(prev => ({ ...prev, [name]: value }));
+  };
+
+  const handleAddEmpExpense = async (e) => {
+    e.preventDefault();
+    if (!empExpenseForm.employeeName || !empExpenseForm.date || !empExpenseForm.amount || !empExpenseForm.category) {
+      alert('Please fill all fields');
+      return;
+    }
+    try {
+      setLoading(true);
+      const payload = {
+        branch: branchName.toLowerCase(),
+        employeeName: empExpenseForm.employeeName,
+        date: empExpenseForm.date,
+        amount: Number(empExpenseForm.amount),
+        category: empExpenseForm.category
+      };
+      await axios.post(api.post('/api/employee-expenses'), payload);
+      setEmpExpAddOpen(false);
+      setEmpExpenseForm({ employeeName: '', date: new Date().toISOString().split('T')[0], amount: '', category: '' });
+      await loadBranchEmployeeExpenses();
+      alert('Employee expense added');
+    } catch (err) {
+      alert('Error adding employee expense');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleEditEmpExpense = (expense) => {
+    setEditingEmpExpense(expense);
+    setEmpExpenseForm({
+      employeeName: expense.employeeName,
+      date: expense.date ? new Date(expense.date).toISOString().split('T')[0] : '',
+      amount: expense.amount,
+      category: expense.category
+    });
+    setEmpExpEditOpen(true);
+  };
+
+  const handleUpdateEmpExpense = async (e) => {
+    e.preventDefault();
+    try {
+      setLoading(true);
+      const payload = {
+        branch: branchName.toLowerCase(),
+        employeeName: empExpenseForm.employeeName,
+        date: empExpenseForm.date,
+        amount: Number(empExpenseForm.amount),
+        category: empExpenseForm.category
+      };
+      await axios.put(api.put(`/api/employee-expenses/${editingEmpExpense._id}`), payload);
+      setEmpExpEditOpen(false);
+      setEditingEmpExpense(null);
+      await loadBranchEmployeeExpenses();
+      alert('Employee expense updated');
+    } catch (err) {
+      alert('Error updating employee expense');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDeleteEmpExpense = async (id) => {
+    if (!window.confirm('Delete this employee expense?')) return;
+    try {
+      setLoading(true);
+      await axios.delete(api.delete(`/api/employee-expenses/${id}`));
+      await loadBranchEmployeeExpenses();
+    } catch (e) {
+      alert('Error deleting expense');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleAddEmployee = async (e) => {
+    e.preventDefault();
+    if (!employeeForm.name) {
+      alert('Name is required');
+      return;
+    }
+    try {
+      setLoading(true);
+      const payload = {
+        branch: branchName.toLowerCase(),
+        name: employeeForm.name,
+        mobile: employeeForm.mobile || '',
+        designation: employeeForm.designation || '',
+        department: employeeForm.department || '',
+        joiningDate: employeeForm.joiningDate || null,
+        salary: employeeForm.salary ? Number(employeeForm.salary) : undefined
+      };
+      await axios.post(api.post('/api/branch-employees'), payload);
+      setEmployeeForm({ name: '', mobile: '', designation: '', department: '', joiningDate: '', salary: '' });
+      await loadBranchEmployees();
+      alert('Employee added');
+    } catch (err) {
+      console.error('Error adding employee:', err);
+      alert('Error adding employee');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDeleteEmployee = async (id) => {
+    if (!window.confirm('Delete this employee?')) return;
+    try {
+      setLoading(true);
+      await axios.delete(api.delete(`/api/branch-employees/${id}`));
+      await loadBranchEmployees();
+    } catch (e) {
+      alert('Error deleting employee');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const openEmployeeDetails = (employee) => {
+    setSelectedEmployee(employee);
+    setEmployeeDetailOpen(true);
+  };
+
+  const openEmployeeEdit = (employee) => {
+    setEditingEmployee(employee);
+    setEmployeeEditForm({
+      name: employee?.name || '',
+      mobile: employee?.mobile || '',
+      designation: employee?.designation || '',
+      department: employee?.department || '',
+      joiningDate: employee?.joiningDate ? new Date(employee.joiningDate).toISOString().split('T')[0] : '',
+      salary: employee?.salary || ''
+    });
+    setEmployeeEditOpen(true);
+  };
+
+  const handleEmployeeEditInput = (e) => {
+    const { name, value } = e.target;
+    setEmployeeEditForm(prev => ({ ...prev, [name]: value }));
+  };
+
+  const handleUpdateEmployee = async (e) => {
+    e.preventDefault();
+    if (!editingEmployee?._id) return;
+    try {
+      setLoading(true);
+      const payload = {
+        branch: branchName.toLowerCase(),
+        ...employeeEditForm,
+        salary: employeeEditForm.salary ? Number(employeeEditForm.salary) : undefined
+      };
+      await axios.put(api.put(`/api/branch-employees/${editingEmployee._id}`), payload);
+      setEmployeeEditOpen(false);
+      setEditingEmployee(null);
+      await loadBranchEmployees();
+      alert('Employee updated');
+    } catch (err) {
+      console.error('Error updating employee:', err);
+      alert('Error updating employee');
     } finally {
       setLoading(false);
     }
@@ -310,11 +671,19 @@ export default function BranchDashboard() {
     setEditModalOpen(false);
     setPaymentModalOpen(false);
     setDetailsOpen(false);
+    setExpenseModalOpen(false);
+    setEmployeeModalOpen(false);
+    setEmployeeDetailOpen(false);
+    setEmployeeEditOpen(false);
+    setSelectedEmployee(null);
+    setEditingEmployee(null);
     setSelectedCustomer(null);
     setEditingEntry(null);
     setPaymentEntry(null);
     setFormData({ date: '', customer: '', place: '', mobile: '', loan: '', interest: '', emi: '' });
     setPaymentData({ date: '', amount: '', customer: '' });
+    setExpenseForm({ date: new Date().toISOString().split('T')[0], month: '', category: '', amount: '', description: '' });
+    setEmployeeForm({ name: '', mobile: '', designation: '', department: '', joiningDate: '', salary: '' });
   };
 
   // Calculate totals - use filteredData for loans view, branchData for dashboard
@@ -414,6 +783,170 @@ export default function BranchDashboard() {
           </div>
         )}
 
+        {/* Category Master → Employee Totals Modal */}
+        <Modal open={showCatEmpTotals} onClose={() => setShowCatEmpTotals(false)}>
+          <div className="bg-white rounded-2xl shadow-2xl p-6 mx-auto" style={{ width: '850px', maxWidth: '95vw' }}>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-xl font-bold text-blue-700">Employee Totals (Single Date)</h3>
+              <button className="text-gray-500 hover:text-gray-700" onClick={() => setShowCatEmpTotals(false)}>
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12"/></svg>
+              </button>
+            </div>
+
+            <div className="grid grid-cols-3 gap-4 mb-4">
+              <div>
+                <label className="block text-sm font-semibold mb-1 text-gray-700">Category</label>
+                <select className="border rounded-lg px-3 py-2 w-full focus:outline-none focus:ring-2 focus:ring-blue-400" value={totalsCategory} onChange={(e)=>setTotalsCategory(e.target.value)}>
+                  {categoryMasterCategories.map(c => (
+                    <option key={c} value={c}>{c}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-semibold mb-1 text-gray-700">Month</label>
+                <select className="border rounded-lg px-3 py-2 w-full focus:outline-none focus:ring-2 focus:ring-blue-400" value={totalsMonth} onChange={(e)=>setTotalsMonth(e.target.value)}>
+                  {Array.from(new Set((branchEmployeeExpenses||[]).map(e => new Date(e.date).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })))).map(m => (
+                    <option key={m}>{m}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-semibold mb-1 text-gray-700">Date</label>
+                <input type="date" className="border rounded-lg px-3 py-2 w-full focus:outline-none focus:ring-2 focus:ring-blue-400" value={totalsDate} onChange={(e)=>setTotalsDate(e.target.value)} />
+              </div>
+            </div>
+
+            {(() => {
+              const rows = (branchEmployeeExpenses||[])
+                .filter(e => totalsCategory === 'All' || e.category === totalsCategory)
+                .filter(e => !totalsMonth || new Date(e.date).toLocaleDateString('en-US', { month: 'long' }) === totalsMonth)
+                .filter(e => !totalsDate || new Date(e.date).toISOString().slice(0,10) === totalsDate)
+                .reduce((map, e) => { const key = e.employeeName || 'Unknown'; map[key] = (map[key] || 0) + Number(e.amount||0); return map; }, {});
+              const entries = Object.entries(rows);
+              return (
+                <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+                  <div className="overflow-x-auto">
+                    <table className="w-full">
+                      <thead className="bg-blue-50">
+                        <tr>
+                          <th className="px-4 py-2 text-left text-sm font-semibold text-gray-700">Employee</th>
+                          <th className="px-4 py-2 text-right text-sm font-semibold text-gray-700">Total (₹)</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {entries.length === 0 ? (
+                          <tr><td colSpan="2" className="px-4 py-6 text-center text-gray-500">No data for selected filters</td></tr>
+                        ) : entries.map(([name, amt]) => (
+                          <tr key={name} className="even:bg-gray-50">
+                            <td className="px-4 py-2 text-base text-gray-800">{name}</td>
+                            <td className="px-4 py-2 text-base text-right font-semibold text-emerald-700">₹{amt.toLocaleString('en-IN')}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                      {entries.length > 0 && (
+                        <tfoot className="bg-blue-50">
+                          <tr>
+                            <td className="px-4 py-2 text-right font-bold">Grand Total</td>
+                            <td className="px-4 py-2 text-right font-bold text-emerald-700">₹{entries.reduce((s, [,a])=> s + a, 0).toLocaleString('en-IN')}</td>
+                          </tr>
+                        </tfoot>
+                      )}
+                    </table>
+                  </div>
+                </div>
+              );
+            })()}
+          </div>
+        </Modal>
+
+        {/* Add Category Modal */}
+        <Modal open={addCategoryOpen} onClose={() => setAddCategoryOpen(false)}>
+          <div className="bg-white rounded-2xl shadow-2xl p-6 mx-auto" style={{ width: '500px', maxWidth: '90vw' }}>
+            <h3 className="text-xl font-bold text-emerald-700 mb-4">Add New Category</h3>
+            <div>
+              <label className="block text-sm font-semibold mb-1.5 text-gray-700">Category Name</label>
+              <input
+                className="border rounded-lg px-3 py-2 w-full focus:outline-none focus:ring-2 focus:ring-emerald-400"
+                placeholder="e.g. Office Exp."
+                value={newCategoryName}
+                onChange={(e)=>setNewCategoryName(e.target.value)}
+              />
+            </div>
+            <div className="flex gap-3 mt-6 justify-end">
+              <button className="px-5 py-2 rounded-lg bg-gray-200 text-gray-700 font-semibold" onClick={()=>setAddCategoryOpen(false)}>Cancel</button>
+              <button
+                className="px-5 py-2 rounded-lg bg-emerald-600 text-white font-semibold hover:bg-emerald-700"
+                onClick={() => {
+                  const name = (newCategoryName || '').trim();
+                  if (!name) return;
+                  setCategoryMasterCategories(prev => prev.includes(name) ? prev : [...prev, name]);
+                  setAddCategoryOpen(false);
+                }}
+              >
+                Add
+              </button>
+            </div>
+          </div>
+        </Modal>
+
+        {/* Category Master → Individual Category (Employee Expenses) */}
+        <Modal open={!!masterCategoryDetail} onClose={() => setMasterCategoryDetail(null)}>
+          {masterCategoryDetail && (
+            <div className="bg-white rounded-2xl shadow-2xl p-6 mx-auto" style={{ width: '700px', maxWidth: '95vw' }}>
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-xl font-bold text-blue-700">{masterCategoryDetail} - Employee Expenses</h3>
+                <button className="text-gray-500 hover:text-gray-700" onClick={() => setMasterCategoryDetail(null)}>
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12"/></svg>
+                </button>
+              </div>
+
+              {(() => {
+                // Group employee expenses by date for the selected category
+                const grouped = (branchEmployeeExpenses || [])
+                  .filter(e => e.category === masterCategoryDetail)
+                  .reduce((map, e) => {
+                    const d = new Date(e.date).toISOString().slice(0,10);
+                    map[d] = (map[d] || 0) + Number(e.amount || 0);
+                    return map;
+                  }, {});
+                const rows = Object.entries(grouped).sort(([a],[b]) => new Date(b) - new Date(a));
+                const grand = rows.reduce((s, [,amt]) => s + amt, 0);
+                return (
+                  <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+                    <div className="overflow-x-auto">
+                      <table className="w-full">
+                        <thead className="bg-blue-50">
+                          <tr>
+                            <th className="px-4 py-2 text-left text-sm font-semibold text-gray-700">Date</th>
+                            <th className="px-4 py-2 text-right text-sm font-semibold text-gray-700">Amount (₹)</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {rows.length === 0 ? (
+                            <tr><td colSpan="2" className="px-4 py-6 text-center text-gray-500">No employee expenses found for this category</td></tr>
+                          ) : rows.map(([date, amt]) => (
+                            <tr key={date} className="even:bg-gray-50">
+                              <td className="px-4 py-2 text-base text-gray-800">{new Date(date).toLocaleDateString('en-IN')}</td>
+                              <td className="px-4 py-2 text-base text-right font-semibold text-emerald-700">₹{amt.toLocaleString('en-IN')}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                        {rows.length > 0 && (
+                          <tfoot className="bg-blue-50">
+                            <tr>
+                              <td className="px-4 py-2 text-right font-bold">Total</td>
+                              <td className="px-4 py-2 text-right font-bold text-emerald-700">₹{grand.toLocaleString('en-IN')}</td>
+                            </tr>
+                          </tfoot>
+                        )}
+                      </table>
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
+          )}
+        </Modal>
         {/* Loans View */}
         {selectedView === 'loans' && (
           <>
@@ -756,16 +1289,471 @@ export default function BranchDashboard() {
           </>
         )}
 
+        {selectedView === 'empExpenses' && (
+          <div className="mt-8">
+            <div className="bg-white rounded-2xl shadow p-8 border border-gray-200">
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-2xl font-bold text-gray-800">Employee Expenses</h2>
+                <p className="text-sm text-gray-500 capitalize">Branch: {branchName}</p>
+              </div>
+
+              {/* Filters */}
+              <div className="mb-6 flex items-end gap-6">
+                <div className="flex-1">
+                  <label className="block text-sm font-semibold mb-2 text-gray-700">Filter by Category</label>
+                  <select
+                    className="w-full px-3 py-3 rounded-xl bg-gray-50 border border-gray-200 shadow-inner focus:outline-none focus:ring-2 focus:ring-emerald-400 focus:bg-white"
+                    value={empExpCategory}
+                    onChange={(e)=>setEmpExpCategory(e.target.value)}
+                  >
+                    <option value="">All Categories</option>
+                    {Array.from(new Set([...(categoryMasterCategories||[]).filter(Boolean)])).map(cat => (
+                      <option key={cat} value={cat}>{cat}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="flex-1">
+                  <label className="block text-sm font-semibold mb-2 text-gray-700">Filter by Date</label>
+                  <input type="date" className="w-full px-3 py-3 rounded-xl bg-gray-50 border border-gray-200 shadow-inner focus:outline-none focus:ring-2 focus:ring-emerald-400 focus:bg-white" value={empExpDate} onChange={(e)=>setEmpExpDate(e.target.value)} />
+                </div>
+                <button className="bg-gray-500 text-white px-5 py-3 rounded-xl font-semibold hover:bg-gray-600" onClick={()=>{ setEmpExpCategory(''); setEmpExpDate(''); }}>Clear</button>
+                <button className="bg-emerald-600 text-white px-5 py-3 rounded-xl font-semibold hover:bg-emerald-700 shadow" onClick={()=> setEmpExpAddOpen(true)}>Add Expense</button>
+              </div>
+
+              {/* Summary Cards */}
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+                <div className="rounded-2xl p-5 border border-blue-100 bg-blue-50/60 shadow-sm">
+                  <p className="text-sm font-medium text-blue-700/80">Total Entries</p>
+                  <p className="text-4xl leading-none font-extrabold text-blue-800 mt-1">{filteredBranchEmployeeExpenses.length}</p>
+                </div>
+                <div className="rounded-2xl p-5 border border-emerald-100 bg-emerald-50/60 shadow-sm">
+                  <p className="text-sm font-medium text-emerald-700/80">Total Amount</p>
+                  <p className="text-4xl leading-none font-extrabold text-emerald-800 mt-1">₹{filteredBranchEmployeeExpenses.reduce((s, e)=> s + Number(e.amount||0), 0).toLocaleString('en-IN')}</p>
+                </div>
+                <div className="rounded-2xl p-5 border border-purple-100 bg-purple-50/60 shadow-sm">
+                  <p className="text-sm font-medium text-purple-700/80">Unique Employees</p>
+                  <p className="text-4xl leading-none font-extrabold text-purple-800 mt-1">{new Set(filteredBranchEmployeeExpenses.map(e=>e.employeeName)).size}</p>
+                </div>
+                <div className="rounded-2xl p-5 border border-orange-100 bg-orange-50/60 shadow-sm">
+                  <p className="text-sm font-medium text-orange-700/80">Categories</p>
+                  <p className="text-4xl leading-none font-extrabold text-orange-800 mt-1">{new Set(filteredBranchEmployeeExpenses.map(e=>e.category)).size}</p>
+                </div>
+              </div>
+
+              {/* Table */}
+              <div className="bg-white rounded-xl shadow-lg overflow-hidden border border-gray-100">
+                <div className="overflow-x-auto">
+                  <table className="w-full border-collapse">
+                    <thead className="bg-blue-50">
+                      <tr>
+                        <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700 uppercase border border-gray-200">Date</th>
+                        <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700 uppercase border border-gray-200">Employee Name</th>
+                        <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700 uppercase border border-gray-200">Category</th>
+                        <th className="px-4 py-3 text-right text-sm font-semibold text-gray-700 uppercase border border-gray-200">Amount (₹)</th>
+                        <th className="px-4 py-3 text-center text-sm font-semibold text-gray-700 uppercase border border-gray-200">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredBranchEmployeeExpenses.map((exp) => (
+                        <tr key={exp._id} className="even:bg-gray-50 hover:bg-gray-100 transition-colors">
+                          <td className="px-4 py-3 text-base text-gray-900 border border-gray-200">{exp.date ? new Date(exp.date).toLocaleDateString('en-IN') : ''}</td>
+                          <td className="px-4 py-3 text-base font-medium text-gray-900 border border-gray-200">{exp.employeeName}</td>
+                          <td className="px-4 py-3 text-base text-gray-700 border border-gray-200">{exp.category}</td>
+                          <td className="px-4 py-3 text-base text-right font-semibold text-emerald-700 border border-gray-200">₹{Number(exp.amount).toLocaleString('en-IN')}</td>
+                          <td className="px-4 py-3 text-center border border-gray-200">
+                            <div className="flex items-center justify-center gap-2">
+                              <button className="p-1 hover:bg-green-100 rounded" title="Edit" onClick={()=>handleEditEmpExpense(exp)}>
+                                <svg className="w-4 h-4 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
+                              </button>
+                              <button className="p-1 hover:bg-red-100 rounded" title="Delete" onClick={()=>handleDeleteEmpExpense(exp._id)}>
+                                <svg className="w-4 h-4 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+
+            {/* Add Employee Expense Modal */}
+            <Modal open={empExpAddOpen} onClose={closeModals}>
+              <div className="bg-white rounded-2xl shadow-2xl p-6 mx-auto" style={{ width: '600px', maxWidth: '90vw' }}>
+                <h2 className="text-xl font-bold mb-4 text-emerald-700">Add Employee Expense</h2>
+                <form onSubmit={handleAddEmpExpense}>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="col-span-2">
+                      <label className="block text-sm font-semibold mb-1.5 text-gray-700">Employee Name *</label>
+                      <select name="employeeName" className="border rounded-lg px-3 py-2 w-full focus:outline-none focus:ring-2 focus:ring-emerald-400" value={empExpenseForm.employeeName} onChange={handleEmpExpenseFormChange} required>
+                        <option value="">Select Employee</option>
+                        {employees.map(emp => (<option key={emp._id} value={emp.name}>{emp.name}</option>))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-semibold mb-1.5 text-gray-700">Date *</label>
+                      <input name="date" type="date" className="border rounded-lg px-3 py-2 w-full focus:outline-none focus:ring-2 focus:ring-emerald-400" value={empExpenseForm.date} onChange={handleEmpExpenseFormChange} required />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-semibold mb-1.5 text-gray-700">Amount (₹) *</label>
+                      <input name="amount" type="number" className="border rounded-lg px-3 py-2 w-full focus:outline-none focus:ring-2 focus:ring-emerald-400" value={empExpenseForm.amount} onChange={handleEmpExpenseFormChange} min="0" step="0.01" required />
+                    </div>
+                    <div className="col-span-2">
+                      <label className="block text-sm font-semibold mb-1.5 text-gray-700">Category *</label>
+                      <select name="category" className="border rounded-lg px-3 py-2 w-full focus:outline-none focus:ring-2 focus:ring-emerald-400" value={empExpenseForm.category} onChange={handleEmpExpenseFormChange} required>
+                        <option value="">Select Category</option>
+                        {Array.from(new Set([...(categoryMasterCategories||[]).filter(Boolean)])).map(cat => (
+                          <option key={cat} value={cat}>{cat}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                  <div className="flex gap-4 mt-6">
+                    <button type="submit" className="bg-emerald-600 text-white px-6 py-3 rounded-lg font-semibold flex-1 hover:bg-emerald-700" disabled={loading}>{loading ? 'Adding...' : 'Add Expense'}</button>
+                    <button type="button" className="bg-gray-400 text-white px-6 py-3 rounded-lg font-semibold flex-1 hover:bg-gray-500" onClick={closeModals}>Cancel</button>
+                  </div>
+                </form>
+              </div>
+            </Modal>
+
+            {/* Edit Employee Expense Modal */}
+            <Modal open={empExpEditOpen} onClose={closeModals}>
+              <div className="bg-white rounded-2xl shadow-2xl p-6 mx-auto" style={{ width: '600px', maxWidth: '90vw' }}>
+                <h2 className="text-xl font-bold mb-4 text-emerald-700">Edit Employee Expense</h2>
+                <form onSubmit={handleUpdateEmpExpense}>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="col-span-2">
+                      <label className="block text-sm font-semibold mb-1.5 text-gray-700">Employee Name *</label>
+                      <select name="employeeName" className="border rounded-lg px-3 py-2 w-full focus:outline-none focus:ring-2 focus:ring-emerald-400" value={empExpenseForm.employeeName} onChange={handleEmpExpenseFormChange} required>
+                        <option value="">Select Employee</option>
+                        {employees.map(emp => (<option key={emp._id} value={emp.name}>{emp.name}</option>))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-semibold mb-1.5 text-gray-700">Date *</label>
+                      <input name="date" type="date" className="border rounded-lg px-3 py-2 w-full focus:outline-none focus:ring-2 focus:ring-emerald-400" value={empExpenseForm.date} onChange={handleEmpExpenseFormChange} required />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-semibold mb-1.5 text-gray-700">Amount (₹) *</label>
+                      <input name="amount" type="number" className="border rounded-lg px-3 py-2 w-full focus:outline-none focus:ring-2 focus:ring-emerald-400" value={empExpenseForm.amount} onChange={handleEmpExpenseFormChange} min="0" step="0.01" required />
+                    </div>
+                    <div className="col-span-2">
+                      <label className="block text-sm font-semibold mb-1.5 text-gray-700">Category *</label>
+                      <select name="category" className="border rounded-lg px-3 py-2 w-full focus:outline-none focus:ring-2 focus:ring-emerald-400" value={empExpenseForm.category} onChange={handleEmpExpenseFormChange} required>
+                        <option value="">Select Category</option>
+                        {Array.from(new Set([...(categoryMasterCategories||[]).filter(Boolean)])).map(cat => (
+                          <option key={cat} value={cat}>{cat}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                  <div className="flex gap-4 mt-6">
+                    <button type="submit" className="bg-emerald-600 text-white px-6 py-3 rounded-lg font-semibold flex-1 hover:bg-emerald-700" disabled={loading}>{loading ? 'Updating...' : 'Update Expense'}</button>
+                    <button type="button" className="bg-gray-400 text-white px-6 py-3 rounded-lg font-semibold flex-1 hover:bg-gray-500" onClick={closeModals}>Cancel</button>
+                  </div>
+                </form>
+              </div>
+            </Modal>
+          </div>
+        )}
+
         {/* Customers View */}
         {selectedView === 'customers' && (
-          <div className="text-center py-16">
-            <div className="bg-gradient-to-br from-purple-100 to-pink-100 w-32 h-32 rounded-full flex items-center justify-center mx-auto mb-6">
-              <svg className="w-16 h-16 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-              </svg>
+          <div>
+            <div className="flex items-center justify-between mb-6">
+              <div>
+                <h2 className="text-2xl font-bold text-gray-800">Customers</h2>
+                <p className="text-sm text-gray-500">Customers with active loans</p>
+              </div>
+              <button
+                onClick={() => {
+                  setFormData({ date: new Date().toISOString().split('T')[0], customer: '', place: '', mobile: '', loan: '', interest: '', emi: '' });
+                  setAddModalOpen(true);
+                }}
+                className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white px-5 py-2 rounded-xl font-semibold hover:from-blue-700 hover:to-indigo-700 transition-all shadow-md hover:shadow-lg flex items-center gap-2"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v12M6 12h12" />
+                </svg>
+                Add Customer
+              </button>
             </div>
-            <h2 className="text-3xl font-bold text-gray-800 mb-3">Customers</h2>
-            <p className="text-gray-600 text-lg">Customer management coming soon...</p>
+            <div className="bg-white rounded-xl shadow-lg overflow-hidden border border-gray-100">
+              <div className="bg-gradient-to-r from-purple-600 to-pink-600 px-4 py-3">
+                <h3 className="text-lg font-bold text-white">Customer List</h3>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead className="bg-gray-50 border-b border-gray-200">
+                    <tr>
+                      <th className="px-4 py-2 text-left text-xs font-semibold text-gray-700 uppercase">Customer</th>
+                      <th className="px-4 py-2 text-left text-xs font-semibold text-gray-700 uppercase">Mobile</th>
+                      <th className="px-4 py-2 text-left text-xs font-semibold text-gray-700 uppercase">Loans</th>
+                      <th className="px-4 py-2 text-center text-xs font-semibold text-gray-700 uppercase">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {Array.from(new Map(filteredData.map(e => [e.customer, e])).values()).map((entry) => {
+                      const loansCount = branchData.filter(x => x.customer === entry.customer).length;
+                      return (
+                        <tr key={entry.customer} className="hover:bg-purple-50 transition-colors">
+                          <td className="px-4 py-2 whitespace-nowrap text-sm font-medium text-gray-900">{entry.customer}</td>
+                          <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-600">{entry.mobile}</td>
+                          <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-600">{loansCount}</td>
+                          <td className="px-4 py-2 whitespace-nowrap text-center">
+                            <button
+                              onClick={() => openCustomerDetails(entry)}
+                              className="px-3 py-1.5 text-sm text-white bg-purple-600 hover:bg-purple-700 rounded-lg"
+                            >View</button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {selectedView === 'expenses' && (
+          <div>
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-2xl font-bold text-gray-800">Indirect Expenses</h2>
+              <p className="text-sm text-gray-500 capitalize">Branch: {branchName}</p>
+            </div>
+
+            <div className="flex justify-end mb-4">
+              <button
+                onClick={() => setExpenseModalOpen(true)}
+                className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white px-5 py-2 rounded-lg font-semibold hover:from-blue-700 hover:to-indigo-700 transition-all shadow-md"
+              >
+                Add Expense
+              </button>
+            </div>
+
+            <div className="bg-white rounded-xl shadow-lg overflow-hidden border border-gray-100">
+              <div className="bg-gradient-to-r from-blue-600 to-indigo-600 px-4 py-3">
+                <h3 className="text-lg font-bold text-white">Expense List</h3>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead className="bg-gray-50 border-b border-gray-200">
+                    <tr>
+                      <th className="px-4 py-2 text-left text-xs font-semibold text-gray-700 uppercase">Date</th>
+                      <th className="px-4 py-2 text-left text-xs font-semibold text-gray-700 uppercase">Month</th>
+                      <th className="px-4 py-2 text-left text-xs font-semibold text-gray-700 uppercase">Category</th>
+                      <th className="px-4 py-2 text-left text-xs font-semibold text-gray-700 uppercase">Description</th>
+                      <th className="px-4 py-2 text-right text-xs font-semibold text-gray-700 uppercase">Amount (₹)</th>
+                      <th className="px-4 py-2 text-center text-xs font-semibold text-gray-700 uppercase">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {branchExpenses.map((ex) => (
+                      <tr key={ex._id} className="hover:bg-blue-50 transition-colors">
+                        <td className="px-4 py-2 text-sm text-gray-900">{new Date(ex.date).toLocaleDateString('en-IN')}</td>
+                        <td className="px-4 py-2 text-sm text-gray-600">{ex.month}</td>
+                        <td className="px-4 py-2 text-sm text-gray-900">{ex.category}</td>
+                        <td className="px-4 py-2 text-sm text-gray-600">{ex.description}</td>
+                        <td className="px-4 py-2 text-sm text-right font-semibold text-blue-600">₹{Number(ex.amount).toLocaleString('en-IN')}</td>
+                        <td className="px-4 py-2 text-center">
+                          <button onClick={()=>handleDeleteExpense(ex._id)} className="px-3 py-1.5 text-sm text-white bg-red-600 hover:bg-red-700 rounded-lg">Delete</button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {selectedView === 'employees' && (
+          <div className="mt-8">
+            <div className="bg-white rounded-2xl shadow p-8 border border-gray-200">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-2xl font-bold text-gray-800">Employee Master</h2>
+              <p className="text-sm text-gray-500 capitalize">Branch: {branchName}</p>
+            </div>
+
+            {/* Search + Add (moved above cards) */}
+            <div className="mb-6 flex items-center justify-between gap-6">
+              <div className="relative flex-1 max-w-2xl">
+                <input
+                  type="text"
+                  className="w-full px-4 py-3 pl-10 pr-10 rounded-xl bg-gray-50 border border-gray-200 shadow-inner focus:outline-none focus:ring-2 focus:ring-emerald-400 focus:bg-white placeholder:text-gray-400"
+                  placeholder="Search by name, mobile, designation, or department..."
+                  value={employeeSearch}
+                  onChange={(e) => setEmployeeSearch(e.target.value)}
+                />
+                <svg className="w-5 h-5 text-gray-400 absolute left-3 top-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+                {employeeSearch && (
+                  <button
+                    onClick={() => setEmployeeSearch('')}
+                    className="absolute right-3 top-2.5 text-gray-400 hover:text-gray-600"
+                  >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                )}
+              </div>
+              <button
+                onClick={() => setEmployeeModalOpen(true)}
+                className="flex items-center gap-2 bg-emerald-600 text-white px-5 py-3 rounded-xl font-semibold hover:bg-emerald-700 transition-all shadow-md"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v12M6 12h12"/></svg>
+                Add Employee
+              </button>
+            </div>
+
+            {/* Summary Cards */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+              <div className="rounded-2xl p-5 border border-emerald-100 bg-emerald-50/60 flex items-center gap-4 shadow-sm">
+                <div className="bg-emerald-100 p-3 rounded-xl">
+                  <svg className="w-6 h-6 text-emerald-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11c1.657 0 3-1.343 3-3S17.657 5 16 5s-3 1.343-3 3 1.343 3 3 3zM8 11c1.657 0 3-1.343 3-3S9.657 5 8 5 5 6.343 5 8s1.343 3 3 3zm0 2c-2.667 0-8 1.333-8 4v2h16v-2c0-2.667-5.333-4-8-4z" />
+                  </svg>
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-emerald-700/80">Total Employees</p>
+                  <p className="text-4xl leading-none font-extrabold text-emerald-800 mt-1">{employees.length}</p>
+                </div>
+              </div>
+              <div className="rounded-2xl p-5 border border-blue-100 bg-blue-50/60 flex items-center gap-4 shadow-sm">
+                <div className="bg-blue-100 p-3 rounded-xl">
+                  <svg className="w-6 h-6 text-blue-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7h18M3 12h18M3 17h18" />
+                  </svg>
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-blue-700/80">Departments</p>
+                  <p className="text-4xl leading-none font-extrabold text-blue-800 mt-1">{new Set((employees||[]).map(e => e.department).filter(Boolean)).size}</p>
+                </div>
+              </div>
+              <div className="rounded-2xl p-5 border border-purple-100 bg-purple-50/60 flex items-center gap-4 shadow-sm">
+                <div className="bg-purple-100 p-3 rounded-xl">
+                  <svg className="w-6 h-6 text-purple-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6M4 6h16" />
+                  </svg>
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-purple-700/80">Designations</p>
+                  <p className="text-4xl leading-none font-extrabold text-purple-800 mt-1">{new Set((employees||[]).map(e => e.designation).filter(Boolean)).size}</p>
+                </div>
+              </div>
+            </div>
+
+            
+
+            <div className="bg-white rounded-xl shadow-lg overflow-hidden border border-gray-100">
+              <div className="overflow-x-auto">
+                <table className="w-full border-collapse">
+                  <thead className="bg-blue-50">
+                    <tr>
+                      <th className="w-12 px-4 py-3 text-left text-sm font-semibold text-gray-700 uppercase border border-gray-200">#</th>
+                      <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700 uppercase border border-gray-200">Name</th>
+                      <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700 uppercase border border-gray-200">Mobile</th>
+                      <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700 uppercase border border-gray-200">Designation</th>
+                      <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700 uppercase border border-gray-200">Department</th>
+                      <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700 uppercase border border-gray-200">Joining Date</th>
+                      <th className="px-4 py-3 text-right text-sm font-semibold text-gray-700 uppercase border border-gray-200">Salary (₹)</th>
+                      <th className="px-4 py-3 text-center text-sm font-semibold text-gray-700 uppercase border border-gray-200">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(filteredEmployees.length ? filteredEmployees : employees).map((em, idx) => (
+                      <tr key={em._id} className="even:bg-gray-50 hover:bg-gray-100 transition-colors cursor-pointer" onClick={() => openEmployeeDetails(em)}>
+                        <td className="px-4 py-3 text-base text-gray-600 border border-gray-200">{idx + 1}</td>
+                        <td className="px-4 py-3 text-base font-medium text-gray-900 border border-gray-200">{em.name}</td>
+                        <td className="px-4 py-3 text-base text-gray-600 border border-gray-200">{em.mobile || '-'}</td>
+                        <td className="px-4 py-3 text-base text-gray-600 border border-gray-200">{em.designation || '-'}</td>
+                        <td className="px-4 py-3 text-base text-gray-600 border border-gray-200">{em.department || '-'}</td>
+                        <td className="px-4 py-3 text-base text-gray-600 border border-gray-200">{em.joiningDate ? new Date(em.joiningDate).toLocaleDateString('en-IN') : '-'}</td>
+                        <td className="px-4 py-3 text-base text-right font-semibold text-emerald-700 border border-gray-200">{em.salary ? `₹${Number(em.salary).toLocaleString('en-IN')}` : '-'}</td>
+                        <td className="px-4 py-3 text-center border border-gray-200">
+                          <div className="flex items-center justify-center gap-2">
+                            <button
+                              className="p-1 hover:bg-green-100 rounded"
+                              title="Edit"
+                              onClick={(e)=>{ e.stopPropagation(); openEmployeeEdit(em); }}
+                            >
+                              <svg className="w-4 h-4 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
+                            </button>
+                            <button
+                              className="p-1 hover:bg-red-100 rounded"
+                              title="Delete"
+                              onClick={(e)=>{ e.stopPropagation(); handleDeleteEmployee(em._id); }}
+                            >
+                              <svg className="w-4 h-4 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+            </div>
+          </div>
+        )}
+
+        {selectedView === 'categoryMaster' && (
+          <div className="mt-8">
+            <div className="bg-white rounded-2xl shadow p-8 border border-gray-200">
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-2xl font-bold text-gray-800">Category Master</h2>
+                <div className="flex items-center gap-3">
+                  <p className="text-sm text-gray-500 capitalize">Branch: {branchName}</p>
+                  <button
+                    className="bg-emerald-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-emerald-700"
+                    onClick={() => { setNewCategoryName(''); setAddCategoryOpen(true); }}
+                  >
+                    Add Category
+                  </button>
+                  <button
+                    className="bg-blue-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-blue-700"
+                    onClick={() => {
+                      setTotalsMonth('All');
+                      setTotalsCategory('All');
+                      setTotalsDate('');
+                      setTotalsViewMode('Single Date');
+                      setShowEmpTotalsResult(false);
+                      setShowCatEmpTotals(true);
+                    }}
+                  >
+                    View Totals
+                  </button>
+                </div>
+              </div>
+
+              {/* Category list derived from Category Manager-like data */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {Array.from(new Set([...(categoryMasterCategories||[]).filter(Boolean)])).map(cat => (
+                  <div key={cat} className="bg-gray-50 rounded-lg shadow p-4 flex items-center justify-between border border-gray-200">
+                    <div>
+                      <h3 className="text-lg font-bold text-gray-800">{cat}</h3>
+                      <p className="text-gray-500 text-sm">{(branchExpenses||[]).filter(e => e.category === cat).length + (filteredBranchEmployeeExpenses||[]).filter(e => e.category === cat).length} entries</p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button className="p-2 hover:bg-gray-200 rounded" title="View" onClick={() => setMasterCategoryDetail(cat)}>
+                        <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
+                      </button>
+                      <button className="p-2 hover:bg-gray-200 rounded" title="Edit" onClick={() => { const name = prompt('Rename category', cat); if (!name || name === cat) return; setCategoryMasterCategories(prev => prev.map(c => c === cat ? name : c)); }}>
+                        <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
+                      </button>
+                      <button className="p-2 hover:bg-gray-200 rounded" title="Delete" onClick={() => { if (!window.confirm(`Delete category "${cat}"?`)) return; setCategoryMasterCategories(prev => prev.filter(c => c !== cat)); }}>
+                        <svg className="w-5 h-5 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
         )}
 
@@ -890,6 +1878,130 @@ export default function BranchDashboard() {
                 className="bg-gray-200 text-gray-700 px-6 py-3 rounded-xl font-semibold flex-1 hover:bg-gray-300 transition-all"
                 onClick={closeModals}
               >
+                Cancel
+              </button>
+            </div>
+          </form>
+        </div>
+        </Modal>
+
+      {/* Employee Detail Modal */}
+      <Modal open={employeeDetailOpen} onClose={closeModals}>
+        <div className="bg-white rounded-2xl shadow-2xl p-6 mx-auto" style={{ width: '600px', maxWidth: '90vw' }}>
+          <h2 className="text-xl font-bold mb-4 text-emerald-700">Employee Details</h2>
+          {selectedEmployee && (
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <p className="text-xs text-gray-600 mb-1">Name</p>
+                <p className="text-sm font-semibold text-gray-800">{selectedEmployee.name}</p>
+              </div>
+              <div>
+                <p className="text-xs text-gray-600 mb-1">Mobile</p>
+                <p className="text-sm font-semibold text-gray-800">{selectedEmployee.mobile || '-'}</p>
+              </div>
+              <div>
+                <p className="text-xs text-gray-600 mb-1">Designation</p>
+                <p className="text-sm font-semibold text-gray-800">{selectedEmployee.designation || '-'}</p>
+              </div>
+              <div>
+                <p className="text-xs text-gray-600 mb-1">Department</p>
+                <p className="text-sm font-semibold text-gray-800">{selectedEmployee.department || '-'}</p>
+              </div>
+              <div>
+                <p className="text-xs text-gray-600 mb-1">Joining Date</p>
+                <p className="text-sm font-semibold text-gray-800">{selectedEmployee.joiningDate ? new Date(selectedEmployee.joiningDate).toLocaleDateString('en-IN') : '-'}</p>
+              </div>
+              <div>
+                <p className="text-xs text-gray-600 mb-1">Salary</p>
+                <p className="text-sm font-bold text-emerald-700">{selectedEmployee.salary ? `₹${Number(selectedEmployee.salary).toLocaleString('en-IN')}` : '-'}</p>
+              </div>
+            </div>
+          )}
+          <div className="flex justify-end mt-6">
+            <button className="bg-gray-500 text-white px-6 py-2 rounded-lg font-semibold hover:bg-gray-600" onClick={closeModals}>Close</button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Edit Employee Modal */}
+      <Modal open={employeeEditOpen} onClose={closeModals}>
+        <div className="bg-white rounded-2xl shadow-2xl p-6 mx-auto" style={{ width: '600px', maxWidth: '90vw' }}>
+          <h2 className="text-xl font-bold mb-4 text-emerald-700">Edit Employee</h2>
+          <form onSubmit={handleUpdateEmployee}>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="col-span-2">
+                <label className="block text-sm font-semibold mb-1 text-gray-700">Name *</label>
+                <input name="name" type="text" className="border rounded-lg px-3 py-2 w-full focus:outline-none focus:ring-2 focus:ring-emerald-400" value={employeeEditForm.name} onChange={handleEmployeeEditInput} required />
+              </div>
+              <div>
+                <label className="block text-sm font-semibold mb-1 text-gray-700">Mobile</label>
+                <input name="mobile" type="tel" className="border rounded-lg px-3 py-2 w-full focus:outline-none focus:ring-2 focus:ring-emerald-400" value={employeeEditForm.mobile} onChange={handleEmployeeEditInput} />
+              </div>
+              <div>
+                <label className="block text-sm font-semibold mb-1 text-gray-700">Designation</label>
+                <input name="designation" type="text" className="border rounded-lg px-3 py-2 w-full focus:outline-none focus:ring-2 focus:ring-emerald-400" value={employeeEditForm.designation} onChange={handleEmployeeEditInput} />
+              </div>
+              <div>
+                <label className="block text-sm font-semibold mb-1 text-gray-700">Department</label>
+                <input name="department" type="text" className="border rounded-lg px-3 py-2 w-full focus:outline-none focus:ring-2 focus:ring-emerald-400" value={employeeEditForm.department} onChange={handleEmployeeEditInput} />
+              </div>
+              <div>
+                <label className="block text-sm font-semibold mb-1 text-gray-700">Joining Date</label>
+                <input name="joiningDate" type="date" className="border rounded-lg px-3 py-2 w-full focus:outline-none focus:ring-2 focus:ring-emerald-400" value={employeeEditForm.joiningDate} onChange={handleEmployeeEditInput} />
+              </div>
+              <div>
+                <label className="block text-sm font-semibold mb-1 text-gray-700">Salary (₹)</label>
+                <input name="salary" type="number" className="border rounded-lg px-3 py-2 w-full focus:outline-none focus:ring-2 focus:ring-emerald-400" value={employeeEditForm.salary} onChange={handleEmployeeEditInput} />
+              </div>
+            </div>
+            <div className="flex gap-4 mt-6">
+              <button type="submit" className="bg-emerald-600 text-white px-6 py-2 rounded-lg font-semibold hover:bg-emerald-700" disabled={loading}>{loading ? 'Updating...' : 'Update Employee'}</button>
+              <button type="button" className="bg-gray-400 text-white px-6 py-2 rounded-lg font-semibold hover:bg-gray-500" onClick={closeModals}>Cancel</button>
+            </div>
+          </form>
+        </div>
+      </Modal>
+
+        {/* Add Expense Modal */}
+        <Modal open={expenseModalOpen} onClose={closeModals}>
+        <div className="bg-white rounded-2xl shadow-2xl p-6 mx-auto" style={{ width: '600px', maxWidth: '90vw' }}>
+          <div className="flex items-center gap-3 mb-6">
+            <div className="bg-blue-100 p-3 rounded-xl">
+              <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 14l2-2 4 4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </div>
+            <h2 className="text-2xl font-bold text-gray-800">Add Indirect Expense</h2>
+          </div>
+
+          <form onSubmit={async (e) => { await handleAddExpense(e); setExpenseModalOpen(false); }}>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-semibold mb-2 text-gray-700">Date *</label>
+                <input type="date" className="border-2 border-gray-200 rounded-lg px-4 py-3 w-full focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent" value={expenseForm.date} onChange={(e)=>setExpenseForm({...expenseForm, date: e.target.value})} required />
+              </div>
+              <div>
+                <label className="block text-sm font-semibold mb-2 text-gray-700">Month *</label>
+                <input type="text" placeholder="2025-10" className="border-2 border-gray-200 rounded-lg px-4 py-3 w-full focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent" value={expenseForm.month} onChange={(e)=>setExpenseForm({...expenseForm, month: e.target.value})} required />
+              </div>
+              <div className="col-span-2">
+                <label className="block text-sm font-semibold mb-2 text-gray-700">Category *</label>
+                <input type="text" className="border-2 border-gray-200 rounded-lg px-4 py-3 w-full focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent" value={expenseForm.category} onChange={(e)=>setExpenseForm({...expenseForm, category: e.target.value})} required />
+              </div>
+              <div>
+                <label className="block text-sm font-semibold mb-2 text-gray-700">Amount (₹) *</label>
+                <input type="number" className="border-2 border-gray-200 rounded-lg px-4 py-3 w-full focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent" value={expenseForm.amount} onChange={(e)=>setExpenseForm({...expenseForm, amount: e.target.value})} required />
+              </div>
+              <div>
+                <label className="block text-sm font-semibold mb-2 text-gray-700">Description</label>
+                <input type="text" className="border-2 border-gray-200 rounded-lg px-4 py-3 w-full focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent" value={expenseForm.description} onChange={(e)=>setExpenseForm({...expenseForm, description: e.target.value})} />
+              </div>
+            </div>
+            <div className="flex gap-4 mt-6">
+              <button type="submit" className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white px-6 py-3 rounded-xl font-semibold flex-1 hover:from-blue-700 hover:to-indigo-700 transition-all shadow-md hover:shadow-lg" disabled={loading}>
+                {loading ? 'Adding...' : 'Add Expense'}
+              </button>
+              <button type="button" className="bg-gray-200 text-gray-700 px-6 py-3 rounded-xl font-semibold flex-1 hover:bg-gray-300 transition-all" onClick={closeModals}>
                 Cancel
               </button>
             </div>
@@ -1105,6 +2217,57 @@ export default function BranchDashboard() {
                 className="bg-gray-200 text-gray-700 px-6 py-3 rounded-xl font-semibold flex-1 hover:bg-gray-300 transition-all"
                 onClick={closeModals}
               >
+                Cancel
+              </button>
+            </div>
+          </form>
+        </div>
+        </Modal>
+
+        {/* Add Employee Modal */}
+        <Modal open={employeeModalOpen} onClose={closeModals}>
+        <div className="bg-white rounded-2xl shadow-2xl p-6 mx-auto" style={{ width: '600px', maxWidth: '90vw' }}>
+          <div className="flex items-center gap-3 mb-6">
+            <div className="bg-emerald-100 p-3 rounded-xl">
+              <svg className="w-6 h-6 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11c1.657 0 3-1.343 3-3S17.657 5 16 5s-3 1.343-3 3 1.343 3 3 3zM8 11c1.657 0 3-1.343 3-3S9.657 5 8 5 5 6.343 5 8s1.343 3 3 3zm0 2c-2.667 0-8 1.333-8 4v2h16v-2c0-2.667-5.333-4-8-4zm8 0c-.29 0-.6.01-.93.03 1.84.84 3.93 2.12 3.93 3.97v2h6v-2c0-2.667-5.333-4-9-4z" />
+              </svg>
+            </div>
+            <h2 className="text-2xl font-bold text-gray-800">Add Employee</h2>
+          </div>
+
+          <form onSubmit={async (e) => { await handleAddEmployee(e); setEmployeeModalOpen(false); }}>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="col-span-2">
+                <label className="block text-sm font-semibold mb-2 text-gray-700">Name *</label>
+                <input type="text" className="border-2 border-gray-200 rounded-lg px-4 py-3 w-full focus:outline-none focus:ring-2 focus:ring-emerald-400 focus:border-transparent" value={employeeForm.name} onChange={(e)=>setEmployeeForm({...employeeForm, name: e.target.value})} required />
+              </div>
+              <div>
+                <label className="block text-sm font-semibold mb-2 text-gray-700">Mobile</label>
+                <input type="tel" className="border-2 border-gray-200 rounded-lg px-4 py-3 w-full focus:outline-none focus:ring-2 focus:ring-emerald-400 focus:border-transparent" value={employeeForm.mobile} onChange={(e)=>setEmployeeForm({...employeeForm, mobile: e.target.value})} />
+              </div>
+              <div>
+                <label className="block text-sm font-semibold mb-2 text-gray-700">Designation</label>
+                <input type="text" className="border-2 border-gray-200 rounded-lg px-4 py-3 w-full focus:outline-none focus:ring-2 focus:ring-emerald-400 focus:border-transparent" value={employeeForm.designation} onChange={(e)=>setEmployeeForm({...employeeForm, designation: e.target.value})} />
+              </div>
+              <div>
+                <label className="block text-sm font-semibold mb-2 text-gray-700">Department</label>
+                <input type="text" className="border-2 border-gray-200 rounded-lg px-4 py-3 w-full focus:outline-none focus:ring-2 focus:ring-emerald-400 focus:border-transparent" value={employeeForm.department} onChange={(e)=>setEmployeeForm({...employeeForm, department: e.target.value})} />
+              </div>
+              <div>
+                <label className="block text-sm font-semibold mb-2 text-gray-700">Joining Date (dd-mm-yyyy)</label>
+                <input type="date" className="border-2 border-gray-200 rounded-lg px-4 py-3 w-full focus:outline-none focus:ring-2 focus:ring-emerald-400 focus:border-transparent" value={employeeForm.joiningDate} onChange={(e)=>setEmployeeForm({...employeeForm, joiningDate: e.target.value})} />
+              </div>
+              <div>
+                <label className="block text-sm font-semibold mb-2 text-gray-700">Salary</label>
+                <input type="number" className="border-2 border-gray-200 rounded-lg px-4 py-3 w-full focus:outline-none focus:ring-2 focus:ring-emerald-400 focus:border-transparent" value={employeeForm.salary} onChange={(e)=>setEmployeeForm({...employeeForm, salary: e.target.value})} />
+              </div>
+            </div>
+            <div className="flex gap-4 mt-6">
+              <button type="submit" className="bg-gradient-to-r from-emerald-600 to-green-600 text-white px-6 py-3 rounded-xl font-semibold flex-1 hover:from-emerald-700 hover:to-green-700 transition-all shadow-md hover:shadow-lg" disabled={loading}>
+                {loading ? 'Adding...' : 'Add Employee'}
+              </button>
+              <button type="button" className="bg-gray-200 text-gray-700 px-6 py-3 rounded-xl font-semibold flex-1 hover:bg-gray-300 transition-all" onClick={closeModals}>
                 Cancel
               </button>
             </div>

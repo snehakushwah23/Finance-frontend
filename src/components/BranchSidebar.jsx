@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 export default function BranchSidebar({ branchName, onLogout, selectedView, onViewChange }) {
   const navigate = useNavigate();
   const [showLogoutModal, setShowLogoutModal] = useState(false);
+  const [openIndirect, setOpenIndirect] = useState(selectedView === 'employees' || selectedView === 'expenses' || selectedView === 'empExpenses' || selectedView === 'categoryMaster');
 
   const confirmLogout = () => {
     if (onLogout) {
@@ -39,6 +40,58 @@ export default function BranchSidebar({ branchName, onLogout, selectedView, onVi
           <span>Dashboard</span>
         </button>
 
+        
+
+        {/* Indirect Expenses Group */}
+        <div>
+          <button
+            className={`w-full flex items-center justify-between text-left px-6 py-3 hover:bg-blue-50 ${openIndirect ? 'text-blue-700' : 'text-gray-700'}`}
+            onClick={() => setOpenIndirect(!openIndirect)}
+          >
+            <span className="flex items-center">
+              <svg className="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 14l2-2 4 4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <span>Indirect Expenses</span>
+            </span>
+            <svg className={`w-4 h-4 transition-transform ${openIndirect ? 'rotate-90' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+            </svg>
+          </button>
+          {openIndirect && (
+            <div className="pl-10">
+              <button
+                className={`w-full flex items-center text-left px-6 py-2.5 hover:bg-blue-50 rounded ${selectedView === 'categoryMaster' ? 'bg-blue-100 font-semibold text-blue-700' : 'text-gray-700'}`}
+                onClick={() => onViewChange('categoryMaster')}
+              >
+                <svg className="w-4 h-4 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7h18M3 12h18M3 17h18" />
+                </svg>
+                <span>Category Master</span>
+              </button>
+              <button
+                className={`w-full flex items-center text-left px-6 py-2.5 hover:bg-blue-50 rounded ${selectedView === 'employees' ? 'bg-blue-100 font-semibold text-blue-700' : 'text-gray-700'}`}
+                onClick={() => onViewChange('employees')}
+              >
+                <svg className="w-4 h-4 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11c1.657 0 3-1.343 3-3S17.657 5 16 5s-3 1.343-3 3 1.343 3 3 3zM8 11c1.657 0 3-1.343 3-3S9.657 5 8 5 5 6.343 5 8s1.343 3 3 3zm0 2c-2.667 0-8 1.333-8 4v2h16v-2c0-2.667-5.333-4-8-4z" />
+                </svg>
+                <span>Employee Master</span>
+              </button>
+              <button
+                className={`w-full flex items-center text-left px-6 py-2.5 hover:bg-blue-50 rounded ${selectedView === 'empExpenses' ? 'bg-blue-100 font-semibold text-blue-700' : 'text-gray-700'}`}
+                onClick={() => onViewChange('empExpenses')}
+              >
+                <svg className="w-4 h-4 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2M4 6h16" />
+                </svg>
+                <span>Employee Expenses</span>
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* Customers and Loans positioning */}
         <button
           className={`w-full flex items-center text-left px-6 py-3 hover:bg-blue-50 ${selectedView === 'customers' ? 'bg-blue-100 font-semibold text-blue-700 border-l-4 border-blue-600' : 'text-gray-700'}`}
           onClick={() => onViewChange('customers')}
