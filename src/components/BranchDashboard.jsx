@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { api } from '../config/api';
@@ -8,6 +8,8 @@ import BranchSidebar from './BranchSidebar';
 export default function BranchDashboard() {
   const { branchName } = useParams();
   const navigate = useNavigate();
+  const isInitialMount = useRef(true);
+  const isInitialMountAdded = useRef(true);
   const [selectedView, setSelectedView] = useState('dashboard');
   const [branchData, setBranchData] = useState([]);
   const [filteredData, setFilteredData] = useState([]);
@@ -53,9 +55,13 @@ export default function BranchDashboard() {
     'Salary',
     'Professional Fees'
   ];
-  const [categoryMasterCategories, setCategoryMasterCategories] = useState(DEFAULT_CATEGORIES);
+  const [categoryMasterCategories, setCategoryMasterCategories] = useState([]);
+  const [deletedCategories, setDeletedCategories] = useState(new Set()); // Track manually deleted categories
+  const [addedCategories, setAddedCategories] = useState(new Set()); // Track manually added categories
   const [masterCategoryDetail, setMasterCategoryDetail] = useState(null);
   const [showCatEmpTotals, setShowCatEmpTotals] = useState(false);
+  const [employeeDetailsModalOpen, setEmployeeDetailsModalOpen] = useState(false);
+  const [selectedEmployeeDetails, setSelectedEmployeeDetails] = useState(null);
   const [totalsCategory, setTotalsCategory] = useState('All');
   const [totalsMonth, setTotalsMonth] = useState('');
   const [totalsDate, setTotalsDate] = useState('');
@@ -102,13 +108,111 @@ export default function BranchDashboard() {
       return;
     }
     
+    // Reset initial mount flags when switching branches
+    isInitialMount.current = true;
+    isInitialMountAdded.current = true;
+    
+    // Clear all branch-specific data when switching branches for complete separation
+    setBranchData([]);
+    setBranchExpenses([]);
+    setBranchEmployeeExpenses([]);
+    setEmployees([]);
+    setCategoryMasterCategories([]); // Will be populated when data loads
+    
+    // Load category settings from database
+    loadCategorySettings();
+    
     loadBranchData();
   }, [branchName, navigate]);
+
+  // Save category settings to database whenever they change
+  useEffect(() => {
+    // Skip saving on initial mount to avoid overwriting loaded data
+    if (isInitialMount.current) {
+      isInitialMount.current = false;
+      console.log('🛑 Skipping save on initial mount, deletedCategories size:', deletedCategories.size);
+      return;
+    }
+    
+    if (!branchName) return;
+    
+    // Save to database with current values
+    saveCategorySettings(addedCategories, deletedCategories);
+  }, [deletedCategories, branchName]);
+
+  // Save category settings to database whenever added categories change
+  useEffect(() => {
+    // Skip saving on initial mount to avoid overwriting loaded data
+    if (isInitialMountAdded.current) {
+      isInitialMountAdded.current = false;
+      console.log('🛑 Skipping save added categories on initial mount, addedCategories size:', addedCategories.size);
+      return;
+    }
+    
+    if (!branchName) return;
+    
+    // Save to database with current values
+    saveCategorySettings(addedCategories, deletedCategories);
+  }, [addedCategories, branchName]);
+
+  // Initialize categories when component first loads
+  useEffect(() => {
+    // Initialize with default categories for the current branch
+    if (categoryMasterCategories.length === 0) {
+      setCategoryMasterCategories([...DEFAULT_CATEGORIES]);
+      console.log('Initialized default categories for branch:', branchName, DEFAULT_CATEGORIES);
+    }
+  }, [branchName, categoryMasterCategories.length]);
+
+  const loadCategorySettings = async () => {
+    try {
+      console.log('🔄 Loading category settings from database for:', branchName);
+      const cacheBuster = new Date().getTime();
+      const res = await axios.get(api.get(`/api/branch-category-settings/${branchName.toLowerCase()}?_t=${cacheBuster}`));
+      
+      const { addedCategories, deletedCategories } = res.data;
+      
+      setAddedCategories(new Set(addedCategories || []));
+      setDeletedCategories(new Set(deletedCategories || []));
+      
+      console.log('✅ Loaded category settings from database:', {
+        added: addedCategories,
+        deleted: deletedCategories
+      });
+    } catch (err) {
+      console.error('Error loading category settings:', err);
+      // Initialize with empty sets on error
+      setAddedCategories(new Set());
+      setDeletedCategories(new Set());
+    }
+  };
+
+  const saveCategorySettings = async (added, deleted) => {
+    try {
+      const payload = {
+        addedCategories: Array.from(added || addedCategories),
+        deletedCategories: Array.from(deleted || deletedCategories)
+      };
+      
+      console.log('💾 Saving category settings to database for:', branchName, payload);
+      
+      await axios.post(api.get(`/api/branch-category-settings/${branchName.toLowerCase()}`), payload);
+      
+      console.log('✅ Category settings saved to database successfully');
+    } catch (err) {
+      console.error('❌ Error saving category settings:', err);
+    }
+  };
 
   const loadBranchData = async () => {
     try {
       setLoading(true);
-      const res = await axios.get(api.get(`/api/branch-entries/${branchName}`));
+      // Add cache busting parameter to force fresh data
+      const cacheBuster = new Date().getTime();
+      const res = await axios.get(api.get(`/api/branch-entries/${branchName}?_t=${cacheBuster}`));
+      
+      console.log('Loading branch data - fresh data:', res.data);
+      
       // Filter out payments to show only loan entries
       const loanEntries = (res.data || []).filter(entry => entry.place !== 'Payment');
       const paymentEntries = (res.data || []).filter(entry => entry.place === 'Payment');
@@ -129,21 +233,29 @@ export default function BranchDashboard() {
 
   const loadBranchExpenses = async () => {
     try {
-      const res = await axios.get(api.get(`/api/branch-expenses/${branchName.toLowerCase()}`));
+      // Add cache busting parameter to force fresh data
+      const cacheBuster = new Date().getTime();
+      console.log('Loading branch expenses for:', branchName);
+      const res = await axios.get(api.get(`/api/branch-expenses/${branchName.toLowerCase()}?_t=${cacheBuster}`));
+      
+      console.log('Branch expenses loaded - count:', res.data?.length, 'data:', res.data);
       setBranchExpenses(res.data || []);
-      // derive categories whenever branch expenses fetched
-      const expCats = new Set((res.data || []).map(e => e.category).filter(Boolean));
-      const empCats = new Set((branchEmployeeExpenses || []).map(e => e.category).filter(Boolean));
-      setCategoryMasterCategories(Array.from(new Set([...expCats, ...empCats, ...categoryMasterCategories])));
+      
+      // Categories will be updated by the useEffect hook - no manual mixing here
     } catch (e) {
       console.error('Error loading branch expenses:', e);
+      console.error('Error details:', e.response?.data || e.message);
       setBranchExpenses([]);
     }
   };
 
   const loadBranchEmployees = async () => {
     try {
-      const res = await axios.get(api.get(`/api/branch-employees/${branchName.toLowerCase()}`));
+      // Add cache busting parameter to force fresh data
+      const cacheBuster = new Date().getTime();
+      const res = await axios.get(api.get(`/api/branch-employees/${branchName.toLowerCase()}?_t=${cacheBuster}`));
+      
+      console.log('Loading employees - fresh data:', res.data);
       setEmployees(res.data || []);
     } catch (e) {
       console.error('Error loading employees:', e);
@@ -154,6 +266,7 @@ export default function BranchDashboard() {
   useEffect(() => {
     if (selectedView === 'expenses') {
       loadBranchExpenses();
+      loadBranchEmployeeExpenses(); // Load employee expenses to get categories
     } else if (selectedView === 'employees') {
       loadBranchEmployees();
     } else if (selectedView === 'empExpenses') {
@@ -162,22 +275,76 @@ export default function BranchDashboard() {
     } else if (selectedView === 'categoryMaster') {
       loadBranchExpenses();
       loadBranchEmployeeExpenses();
+    } else if (selectedView === 'dashboard') {
+      // Load all data for dashboard view
+      loadBranchExpenses();
+      loadBranchEmployeeExpenses();
+      loadBranchEmployees();
     }
   }, [selectedView]);
 
-  // Recompute Category Master list when data or view changes
+  // Recompute Category Master list when data or view changes - BRANCH SPECIFIC WITH DEFAULTS
   useEffect(() => {
     if (selectedView !== 'categoryMaster') return;
+    
+    // Get categories from current branch data
     const expCats = new Set((branchExpenses || []).map(e => e.category).filter(Boolean));
     const empCats = new Set((branchEmployeeExpenses || []).map(e => e.category).filter(Boolean));
-    const merged = Array.from(new Set([
-      ...DEFAULT_CATEGORIES,
-      ...Array.from(expCats),
-      ...Array.from(empCats),
-      ...categoryMasterCategories
+    
+    // Merge branch-specific categories with DEFAULT_CATEGORIES for this branch
+    // Filter out manually deleted categories and add manually added categories
+    const branchSpecificCategories = Array.from(new Set([
+      ...DEFAULT_CATEGORIES.filter(cat => !deletedCategories.has(cat.toLowerCase())),  // Default categories minus deleted ones
+      ...Array.from(expCats).filter(cat => !deletedCategories.has(cat.toLowerCase())), // Branch expenses minus deleted ones
+      ...Array.from(empCats).filter(cat => !deletedCategories.has(cat.toLowerCase())), // Employee expenses minus deleted ones
+      ...Array.from(addedCategories)  // Manually added categories
     ].filter(Boolean)));
-    setCategoryMasterCategories(merged);
-  }, [selectedView, branchExpenses, branchEmployeeExpenses]);
+    
+    setCategoryMasterCategories(branchSpecificCategories);
+    console.log('Branch-specific categories for', branchName, ':', branchSpecificCategories);
+    console.log('Deleted categories:', Array.from(deletedCategories));
+    console.log('Added categories:', Array.from(addedCategories));
+  }, [selectedView, branchExpenses, branchEmployeeExpenses, branchName, deletedCategories, addedCategories]);
+
+  // Initialize categories for dashboard view when data is loaded
+  useEffect(() => {
+    if (selectedView === 'dashboard' && (branchExpenses || branchEmployeeExpenses)) {
+      // Get categories from current branch data
+      const expCats = new Set((branchExpenses || []).map(e => e.category).filter(Boolean));
+      const empCats = new Set((branchEmployeeExpenses || []).map(e => e.category).filter(Boolean));
+      
+      // Merge branch-specific categories with DEFAULT_CATEGORIES for this branch
+      const branchSpecificCategories = Array.from(new Set([
+        ...DEFAULT_CATEGORIES,  // Always include default categories for each branch
+        ...Array.from(expCats),
+        ...Array.from(empCats),
+        ...Array.from(addedCategories)  // Include manually added categories
+      ].filter(Boolean)));
+      
+      setCategoryMasterCategories(branchSpecificCategories);
+      console.log('Initialized categories for dashboard -', branchName, ':', branchSpecificCategories);
+    }
+  }, [selectedView, branchExpenses, branchEmployeeExpenses, branchName, addedCategories]);
+
+  // Initialize categories for expenses view when data is loaded
+  useEffect(() => {
+    if (selectedView === 'expenses' && (branchExpenses || branchEmployeeExpenses)) {
+      // Get categories from current branch data
+      const expCats = new Set((branchExpenses || []).map(e => e.category).filter(Boolean));
+      const empCats = new Set((branchEmployeeExpenses || []).map(e => e.category).filter(Boolean));
+      
+      // Merge branch-specific categories with DEFAULT_CATEGORIES for this branch
+      const branchSpecificCategories = Array.from(new Set([
+        ...DEFAULT_CATEGORIES,  // Always include default categories for each branch
+        ...Array.from(expCats),
+        ...Array.from(empCats),
+        ...Array.from(addedCategories)  // Include manually added categories
+      ].filter(Boolean)));
+      
+      setCategoryMasterCategories(branchSpecificCategories);
+      console.log('Initialized categories for expenses view -', branchName, ':', branchSpecificCategories);
+    }
+  }, [selectedView, branchExpenses, branchEmployeeExpenses, branchName, addedCategories]);
 
   // Filter employees by search
   useEffect(() => {
@@ -242,15 +409,18 @@ export default function BranchDashboard() {
   // Branch Employee Expenses
   const loadBranchEmployeeExpenses = async () => {
     try {
-      const res = await axios.get(api.get(`/api/employee-expenses/${branchName.toLowerCase()}`));
+      // Add cache busting parameter to force fresh data
+      const cacheBuster = new Date().getTime();
+      const res = await axios.get(api.get(`/api/employee-expenses/${branchName.toLowerCase()}?_t=${cacheBuster}`));
+      
+      console.log('Loading employee expenses - fresh data:', res.data);
+      
       // newest first
       const sorted = (res.data || []).sort((a, b) => new Date(b.date) - new Date(a.date));
       setBranchEmployeeExpenses(sorted);
       setFilteredBranchEmployeeExpenses(sorted);
-      // derive categories whenever employee expenses fetched
-      const expCats = new Set((branchExpenses || []).map(e => e.category).filter(Boolean));
-      const empCats = new Set(sorted.map(e => e.category).filter(Boolean));
-      setCategoryMasterCategories(Array.from(new Set([...expCats, ...empCats, ...categoryMasterCategories])));
+      
+      // Categories will be updated by the useEffect hook - no manual mixing here
     } catch (e) {
       console.error('Error loading employee expenses:', e);
       setBranchEmployeeExpenses([]);
@@ -322,13 +492,23 @@ export default function BranchDashboard() {
         amount: Number(empExpenseForm.amount),
         category: empExpenseForm.category
       };
-      await axios.put(api.put(`/api/employee-expenses/${editingEmpExpense._id}`), payload);
+      
+      console.log('Updating employee expense:', payload);
+      const response = await axios.put(api.put(`/api/employee-expenses/${editingEmpExpense._id}`), payload);
+      console.log('Update response:', response.data);
+      
       setEmpExpEditOpen(false);
       setEditingEmpExpense(null);
+      
+      // Small delay to ensure backend has processed the update
+      setTimeout(async () => {
       await loadBranchEmployeeExpenses();
-      alert('Employee expense updated');
+      }, 500);
+      
+      alert('Employee expense updated successfully');
     } catch (err) {
-      alert('Error updating employee expense');
+      console.error('Error updating employee expense:', err);
+      alert('Error updating employee expense: ' + (err.response?.data?.message || err.message));
     } finally {
       setLoading(false);
     }
@@ -344,6 +524,110 @@ export default function BranchDashboard() {
       alert('Error deleting expense');
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Update category in all related expenses for current branch only
+  const updateCategoryInExpenses = async (oldCategory, newCategory) => {
+    try {
+      console.log('Updating category from', oldCategory, 'to', newCategory, 'for branch:', branchName);
+      
+      // Update branch expenses for current branch only
+      const branchExpensesToUpdate = (branchExpenses || []).filter(exp => 
+        exp.category === oldCategory && 
+        exp.branch && 
+        exp.branch.toLowerCase() === branchName.toLowerCase()
+      );
+      console.log('Branch expenses to update:', branchExpensesToUpdate.length);
+      
+      for (const expense of branchExpensesToUpdate) {
+        await axios.put(api.put(`/api/branch-expenses/${expense._id}`), {
+          ...expense,
+          category: newCategory
+        });
+      }
+      
+      // Update employee expenses for current branch only
+      const employeeExpensesToUpdate = (branchEmployeeExpenses || []).filter(exp => 
+        exp.category === oldCategory && 
+        exp.branch && 
+        exp.branch.toLowerCase() === branchName.toLowerCase()
+      );
+      console.log('Employee expenses to update:', employeeExpensesToUpdate.length);
+      
+      for (const expense of employeeExpensesToUpdate) {
+        await axios.put(api.put(`/api/employee-expenses/${expense._id}`), {
+          branch: expense.branch,
+          employeeName: expense.employeeName,
+          date: expense.date,
+          amount: expense.amount,
+          category: newCategory
+        });
+      }
+      
+      // Refresh all data for current branch
+      await Promise.all([
+        loadBranchExpenses(),
+        loadBranchEmployeeExpenses()
+      ]);
+      
+      console.log('Category update completed successfully for branch:', branchName);
+    } catch (error) {
+      console.error('Error updating category in expenses:', error);
+      throw error;
+    }
+  };
+
+  // Delete category and all related expenses for current branch only
+  const deleteCategoryAndExpenses = async (categoryToDelete) => {
+    try {
+      console.log('=== STARTING CATEGORY DELETION ===');
+      console.log('Category to delete:', categoryToDelete);
+      console.log('Branch:', branchName);
+      console.log('Total branch expenses:', (branchExpenses || []).length);
+      console.log('Total employee expenses:', (branchEmployeeExpenses || []).length);
+      
+      // Delete branch expenses for current branch only
+      const branchExpensesToDelete = (branchExpenses || []).filter(exp => 
+        exp.category === categoryToDelete && 
+        exp.branch && 
+        exp.branch.toLowerCase() === branchName.toLowerCase()
+      );
+      console.log('Branch expenses to delete:', branchExpensesToDelete.length);
+      console.log('Branch expenses details:', branchExpensesToDelete);
+      
+      for (const expense of branchExpensesToDelete) {
+        console.log('Deleting branch expense:', expense._id);
+        await axios.delete(api.delete(`/api/branch-expenses/${expense._id}`));
+      }
+      
+      // Delete employee expenses for current branch only
+      const employeeExpensesToDelete = (branchEmployeeExpenses || []).filter(exp => 
+        exp.category === categoryToDelete && 
+        exp.branch && 
+        exp.branch.toLowerCase() === branchName.toLowerCase()
+      );
+      console.log('Employee expenses to delete:', employeeExpensesToDelete.length);
+      console.log('Employee expenses details:', employeeExpensesToDelete);
+      
+      for (const expense of employeeExpensesToDelete) {
+        console.log('Deleting employee expense:', expense._id);
+        await axios.delete(api.delete(`/api/employee-expenses/${expense._id}`));
+      }
+      
+      console.log('All expenses deleted, refreshing data...');
+      
+      // Refresh all data for current branch
+      await Promise.all([
+        loadBranchExpenses(),
+        loadBranchEmployeeExpenses()
+      ]);
+      
+      console.log('=== CATEGORY DELETION COMPLETED ===');
+      console.log('Category and expenses deletion completed successfully for branch:', branchName);
+    } catch (error) {
+      console.error('Error deleting category and expenses:', error);
+      throw error;
     }
   };
 
@@ -422,14 +706,23 @@ export default function BranchDashboard() {
         ...employeeEditForm,
         salary: employeeEditForm.salary ? Number(employeeEditForm.salary) : undefined
       };
-      await axios.put(api.put(`/api/branch-employees/${editingEmployee._id}`), payload);
+      
+      console.log('Updating employee:', payload);
+      const response = await axios.put(api.put(`/api/branch-employees/${editingEmployee._id}`), payload);
+      console.log('Update response:', response.data);
+      
       setEmployeeEditOpen(false);
       setEditingEmployee(null);
+      
+      // Small delay to ensure backend has processed the update
+      setTimeout(async () => {
       await loadBranchEmployees();
-      alert('Employee updated');
+      }, 500);
+      
+      alert('Employee updated successfully');
     } catch (err) {
       console.error('Error updating employee:', err);
-      alert('Error updating employee');
+      alert('Error updating employee: ' + (err.response?.data?.message || err.message));
     } finally {
       setLoading(false);
     }
@@ -551,15 +844,23 @@ export default function BranchDashboard() {
         date: formData.date
       };
       
-      await axios.put(api.put(`/api/branch-entries/${editingEntry._id}`), payload);
+      console.log('Updating loan entry:', payload);
+      const response = await axios.put(api.put(`/api/branch-entries/${editingEntry._id}`), payload);
+      console.log('Update response:', response.data);
+      
       setEditModalOpen(false);
       setEditingEntry(null);
       setFormData({ date: '', customer: '', place: '', mobile: '', loan: '', interest: '', emi: '' });
+      
+      // Small delay to ensure backend has processed the update
+      setTimeout(async () => {
       await loadBranchData();
+      }, 500);
+      
       alert('Entry updated successfully');
     } catch (error) {
       console.error('Error updating entry:', error);
-      alert('Error updating entry');
+      alert('Error updating entry: ' + (error.response?.data?.message || error.message));
     } finally {
       setLoading(false);
     }
@@ -675,6 +976,9 @@ export default function BranchDashboard() {
     setEmployeeModalOpen(false);
     setEmployeeDetailOpen(false);
     setEmployeeEditOpen(false);
+    setEmpExpAddOpen(false);
+    setEmpExpEditOpen(false);
+    setEditingEmpExpense(null);
     setSelectedEmployee(null);
     setEditingEmployee(null);
     setSelectedCustomer(null);
@@ -750,34 +1054,565 @@ export default function BranchDashboard() {
         {/* Content Area */}
         <main className="pt-20 p-8">
         
-        {/* Dashboard View */}
+        {/* Dashboard View - Finance Manager Style */}
         {selectedView === 'dashboard' && (
-          <div className="text-center py-16">
-            <div className="bg-gradient-to-br from-blue-100 to-purple-100 w-32 h-32 rounded-full flex items-center justify-center mx-auto mb-6">
-              <svg className="w-16 h-16 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <div>
+            {/* Header */}
+            <div className="mb-8">
+              <h1 className="text-3xl font-bold text-gray-800 capitalize">{branchName} Branch Dashboard</h1>
+            </div>
+
+            {/* Overview Cards */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+              {/* Employee Expenses Card */}
+              <div className="bg-white p-6 rounded-2xl shadow-md border border-gray-100">
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <p className="text-sm font-medium text-gray-600">Employee Expenses</p>
+                    <p className="text-2xl font-bold text-gray-900">
+                      ₹{(branchEmployeeExpenses || []).reduce((sum, exp) => sum + Number(exp.amount || 0), 0).toLocaleString('en-IN')}
+                    </p>
+                    <p className="text-xs text-gray-500 mt-1">{(branchEmployeeExpenses || []).length} Expenses</p>
+                  </div>
+                  <div className="flex items-center text-green-600">
+                    <svg className="w-5 h-5 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clipRule="evenodd" />
+                    </svg>
+                    <span className="text-sm font-medium">Expenses</span>
+                  </div>
+                </div>
+                <div className="w-full bg-gray-200 rounded-full h-2">
+                  <div className="bg-green-500 h-2 rounded-full" style={{ width: '75%' }}></div>
+                </div>
+              </div>
+
+              {/* Total Loans Card */}
+              <div className="bg-white p-6 rounded-2xl shadow-md border border-gray-100">
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <p className="text-sm font-medium text-gray-600">Total Loans</p>
+                    <p className="text-2xl font-bold text-gray-900">₹{totalLoan.toLocaleString('en-IN')}</p>
+                    <p className="text-xs text-gray-500 mt-1">{dataToUse.length} Active Loans</p>
+                  </div>
+                  <div className="flex items-center text-purple-600">
+                    <svg className="w-5 h-5 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M4 4a2 2 0 00-2 2v4a2 2 0 002 2V6h10a2 2 0 00-2-2H4zm2 6a2 2 0 012-2h8a2 2 0 012 2v4a2 2 0 01-2 2H8a2 2 0 01-2-2v-4zm6 4a2 2 0 100-4 2 2 0 000 4z" clipRule="evenodd" />
+                    </svg>
+                    <span className="text-sm font-medium">Loans</span>
+                  </div>
+                </div>
+                <div className="w-full bg-gray-200 rounded-full h-2">
+                  <div className="bg-purple-500 h-2 rounded-full" style={{ width: '75%' }}></div>
+                </div>
+              </div>
+
+              {/* Total Customers Card */}
+              <div className="bg-white p-6 rounded-2xl shadow-md border border-gray-100">
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <p className="text-sm font-medium text-gray-600">Total Customers</p>
+                    <p className="text-2xl font-bold text-gray-900">
+                      {[...new Set(dataToUse.map(e => e.customer))].filter(Boolean).length}
+                    </p>
+                    <p className="text-xs text-gray-500 mt-1">Unique Customers</p>
+                  </div>
+                  <div className="flex items-center text-orange-600">
+                    <svg className="w-5 h-5 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clipRule="evenodd" />
+                    </svg>
+                    <span className="text-sm font-medium">Customers</span>
+                  </div>
+                </div>
+                <div className="w-full bg-gray-200 rounded-full h-2">
+                  <div className="bg-orange-500 h-2 rounded-full" style={{ width: '60%' }}></div>
+                </div>
+              </div>
+            </div>
+
+            {/* Charts Section */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+              {/* Expenses Chart */}
+              <div className="bg-white p-6 rounded-2xl shadow-md border border-gray-100">
+                <div className="flex justify-between items-center mb-6">
+                  <h3 className="text-lg font-semibold text-gray-800">Expenses Overview</h3>
+                  <select className="border border-gray-300 rounded-lg px-3 py-1 text-sm">
+                    <option>This Year</option>
+                    <option>This Month</option>
+                    <option>Last Month</option>
+                  </select>
+                </div>
+                
+                {/* Main Expense Display */}
+                <div className="text-center mb-6">
+                  <div className="text-3xl font-bold text-gray-900 mb-2">
+                    ₹{([...(branchExpenses || []), ...(branchEmployeeExpenses || [])]).reduce((sum, exp) => sum + Number(exp.amount || 0), 0).toLocaleString('en-IN')}
+                  </div>
+                  <div className="text-sm text-gray-600">Total Branch Expenses</div>
+                </div>
+
+                {/* Expense Stats Grid */}
+                <div className="grid grid-cols-2 gap-4 mb-6">
+                  <div className="bg-green-50 p-4 rounded-lg text-center">
+                    <div className="text-2xl font-bold text-green-600">{(branchEmployeeExpenses || []).length}</div>
+                    <div className="text-sm text-green-700">Employee Exp.</div>
+                  </div>
+                  <div className="bg-blue-50 p-4 rounded-lg text-center">
+                    <div className="text-2xl font-bold text-blue-600">{(branchExpenses || []).length}</div>
+                    <div className="text-sm text-blue-700">Branch Exp.</div>
+                  </div>
+                </div>
+
+                {/* Visual Progress */}
+                <div className="space-y-4">
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm font-medium text-gray-700">Branch Expenses</span>
+                    <span className="text-sm font-bold text-gray-900">
+                      ₹{(branchExpenses || []).reduce((sum, exp) => sum + (exp.amount || 0), 0).toLocaleString('en-IN')}
+                    </span>
+                  </div>
+                  <div className="w-full bg-gray-200 rounded-full h-3">
+                    <div 
+                      className="bg-gradient-to-r from-blue-500 to-blue-600 rounded-full h-3 transition-all duration-500" 
+                      style={{ 
+                        width: `${(() => {
+                          const branchExp = (branchExpenses || []).reduce((sum, exp) => sum + (exp.amount || 0), 0);
+                          const empExp = (branchEmployeeExpenses || []).reduce((sum, exp) => sum + Number(exp.amount || 0), 0);
+                          const total = branchExp + empExp;
+                          return total > 0 ? Math.round((branchExp / total) * 100) : 0;
+                        })()}%` 
+                      }}
+                    ></div>
+                  </div>
+                  <div className="flex justify-between items-center mt-4">
+                    <span className="text-sm font-medium text-gray-700">Employee Expenses</span>
+                    <span className="text-sm font-bold text-gray-900">
+                      ₹{(branchEmployeeExpenses || []).reduce((sum, exp) => sum + Number(exp.amount || 0), 0).toLocaleString('en-IN')}
+                    </span>
+                  </div>
+                  <div className="w-full bg-gray-200 rounded-full h-3">
+                    <div 
+                      className="bg-gradient-to-r from-green-500 to-green-600 rounded-full h-3 transition-all duration-500" 
+                      style={{ 
+                        width: `${(() => {
+                          const branchExp = (branchExpenses || []).reduce((sum, exp) => sum + (exp.amount || 0), 0);
+                          const empExp = (branchEmployeeExpenses || []).reduce((sum, exp) => sum + Number(exp.amount || 0), 0);
+                          const total = branchExp + empExp;
+                          return total > 0 ? Math.round((empExp / total) * 100) : 0;
+                        })()}%` 
+                      }}
+                    ></div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Loans Chart */}
+              <div className="bg-white p-6 rounded-2xl shadow-md border border-gray-100">
+                <div className="flex justify-between items-center mb-6">
+                  <h3 className="text-lg font-semibold text-gray-800">Loans Overview</h3>
+                  <select className="border border-gray-300 rounded-lg px-3 py-1 text-sm">
+                    <option>All Loans</option>
+                    <option>Active Only</option>
+                  </select>
+                </div>
+                
+                {/* Loans Stats */}
+                <div className="space-y-4">
+                  <div className="flex justify-between items-center">
+                    <div className="flex items-center gap-3">
+                      <div className="w-4 h-4 bg-purple-500 rounded"></div>
+                      <span className="text-sm font-medium text-gray-700">Total Loans</span>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-lg font-bold text-gray-900">₹{totalLoan.toLocaleString('en-IN')}</div>
+                      <div className="text-xs text-gray-500">{dataToUse.length} loans</div>
+                    </div>
+                  </div>
+                  
+                  <div className="flex justify-between items-center">
+                    <div className="flex items-center gap-3">
+                      <div className="w-4 h-4 bg-orange-500 rounded"></div>
+                      <span className="text-sm font-medium text-gray-700">Total Interest</span>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-lg font-bold text-gray-900">₹{totalInterest.toLocaleString('en-IN')}</div>
+                      <div className="text-xs text-gray-500">Expected interest</div>
+                    </div>
+                  </div>
+
+                  <div className="flex justify-between items-center">
+                    <div className="flex items-center gap-3">
+                      <div className="w-4 h-4 bg-blue-500 rounded"></div>
+                      <span className="text-sm font-medium text-gray-700">Monthly EMI</span>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-lg font-bold text-gray-900">₹{totalEMI.toLocaleString('en-IN')}</div>
+                      <div className="text-xs text-gray-500">Per month collection</div>
+                    </div>
+                  </div>
+                </div>
+                
+                {/* Loans Visual */}
+                <div className="mt-6">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="bg-purple-50 p-4 rounded-lg text-center">
+                      <div className="text-2xl font-bold text-purple-600">{dataToUse.length}</div>
+                      <div className="text-sm text-purple-700">Active Loans</div>
+                    </div>
+                    <div className="bg-orange-50 p-4 rounded-lg text-center">
+                      <div className="text-2xl font-bold text-orange-600">
+                        {[...new Set(dataToUse.map(e => e.customer))].filter(Boolean).length}
+                      </div>
+                      <div className="text-sm text-orange-700">Customers</div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Payment Distribution */}
+                <div className="mt-6">
+                  <div className="text-sm font-medium text-gray-700 mb-3">Payment Collection</div>
+                  <div className="space-y-2">
+                    <div className="flex justify-between items-center">
+                      <span className="text-xs text-gray-600">Total Payments</span>
+                      <span className="text-xs font-medium text-gray-900">
+                        ₹{(allPayments || []).reduce((sum, pay) => sum + Number(pay.amount || 0), 0).toLocaleString('en-IN')}
+                      </span>
+                    </div>
+                    <div className="w-full bg-gray-200 rounded-full h-2">
+                      <div 
+                        className="bg-gradient-to-r from-purple-500 to-orange-500 h-2 rounded-full transition-all duration-500" 
+                        style={{ 
+                          width: `${(() => {
+                            const payments = (allPayments || []).reduce((sum, pay) => sum + Number(pay.amount || 0), 0);
+                            return totalLoan > 0 ? Math.min((payments / totalLoan) * 100, 100) : 0;
+                          })()}%` 
+                        }}
+                      ></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Bottom Section */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+              {/* Recent Transactions */}
+              <div className="lg:col-span-2 bg-white p-6 rounded-2xl shadow-md border border-gray-100">
+                <div className="flex justify-between items-center mb-6">
+                  <h3 className="text-lg font-semibold text-gray-800">Recent Employee Expenses</h3>
+                  <div className="flex items-center gap-2">
+                    <select className="border border-gray-300 rounded-lg px-3 py-1 text-sm">
+                      <option>This Month</option>
+                      <option>Last Month</option>
+                    </select>
+                    <button className="p-2 hover:bg-gray-100 rounded-lg">
+                      <svg className="w-4 h-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.414A1 1 0 013 6.707V4z" />
+                      </svg>
+                    </button>
+                  </div>
+                </div>
+
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead>
+                      <tr className="border-b border-gray-200">
+                        <th className="text-left py-3 text-sm font-medium text-gray-600">Employee Name</th>
+                        <th className="text-left py-3 text-sm font-medium text-gray-600">Category</th>
+                        <th className="text-left py-3 text-sm font-medium text-gray-600">Date</th>
+                        <th className="text-right py-3 text-sm font-medium text-gray-600">Amount</th>
+                        <th className="text-center py-3 text-sm font-medium text-gray-600">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {(branchEmployeeExpenses || []).slice(0, 5).length === 0 ? (
+                        <tr>
+                          <td colSpan="5" className="text-center py-8 text-gray-500">No recent employee expenses</td>
+                        </tr>
+                      ) : (
+                        (branchEmployeeExpenses || []).slice(0, 5).map((expense, index) => (
+                          <tr key={expense._id || index} className="hover:bg-gray-50">
+                            <td className="py-3 text-sm font-medium text-gray-900">{expense.employeeName}</td>
+                            <td className="py-3 text-sm text-gray-600">{expense.category}</td>
+                            <td className="py-3 text-sm text-gray-600">
+                              {new Date(expense.date).toLocaleDateString('en-IN')}
+                            </td>
+                            <td className="py-3 text-sm text-right font-semibold text-gray-900">
+                              ₹{Number(expense.amount || 0).toLocaleString('en-IN')}
+                            </td>
+                            <td className="py-3 text-center">
+                              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                Completed
+                              </span>
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* Recent Activity */}
+              <div className="bg-white p-6 rounded-2xl shadow-md border border-gray-100">
+                <h3 className="text-lg font-semibold text-gray-800 mb-6">Quick Actions</h3>
+                
+                <div className="space-y-3">
+                  <button 
+                    onClick={() => setSelectedView('loans')}
+                    className="w-full flex items-center gap-3 p-3 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors"
+                  >
+                    <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
+                      <svg className="w-4 h-4 text-blue-600" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M4 4a2 2 0 00-2 2v4a2 2 0 002 2V6h10a2 2 0 00-2-2H4zm2 6a2 2 0 012-2h8a2 2 0 012 2v4a2 2 0 01-2 2H8a2 2 0 01-2-2v-4zm6 4a2 2 0 100-4 2 2 0 000 4z" clipRule="evenodd" />
+                      </svg>
+                    </div>
+                    <div className="flex-1 text-left">
+                      <p className="text-sm font-medium text-gray-900">Manage Loans</p>
+                      <p className="text-xs text-gray-500">View and manage loans</p>
+                    </div>
+                  </button>
+
+                  <button 
+                    onClick={() => setSelectedView('empExpenses')}
+                    className="w-full flex items-center gap-3 p-3 bg-green-50 hover:bg-green-100 rounded-lg transition-colors"
+                  >
+                    <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center">
+                      <svg className="w-4 h-4 text-green-600" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clipRule="evenodd" />
+                      </svg>
+                    </div>
+                    <div className="flex-1 text-left">
+                      <p className="text-sm font-medium text-gray-900">Employee Expenses</p>
+                      <p className="text-xs text-gray-500">Track employee expenses</p>
+                    </div>
+                  </button>
+
+                  <button 
+                    onClick={() => setSelectedView('expenses')}
+                    className="w-full flex items-center gap-3 p-3 bg-purple-50 hover:bg-purple-100 rounded-lg transition-colors"
+                  >
+                    <div className="w-8 h-8 bg-purple-100 rounded-full flex items-center justify-center">
+                      <svg className="w-4 h-4 text-purple-600" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M4 4a2 2 0 00-2 2v1h16V6a2 2 0 00-2-2H4zm14 5H2v5a2 2 0 002 2h12a2 2 0 002-2V9z" clipRule="evenodd" />
+                      </svg>
+                    </div>
+                    <div className="flex-1 text-left">
+                      <p className="text-sm font-medium text-gray-900">Branch Expenses</p>
+                      <p className="text-xs text-gray-500">Manage branch expenses</p>
+                    </div>
+                  </button>
+
+                  <button 
+                    onClick={() => setSelectedView('categoryMaster')}
+                    className="w-full flex items-center gap-3 p-3 bg-orange-50 hover:bg-orange-100 rounded-lg transition-colors"
+                  >
+                    <div className="w-8 h-8 bg-orange-100 rounded-full flex items-center justify-center">
+                      <svg className="w-4 h-4 text-orange-600" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M3 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z" clipRule="evenodd" />
+                      </svg>
+                    </div>
+                    <div className="flex-1 text-left">
+                      <p className="text-sm font-medium text-gray-900">Category Manager</p>
+                      <p className="text-xs text-gray-500">Organize categories</p>
+                    </div>
+                  </button>
+
+                  <button 
+                    onClick={() => setSelectedView('employees')}
+                    className="w-full flex items-center gap-3 p-3 bg-teal-50 hover:bg-teal-100 rounded-lg transition-colors"
+                  >
+                    <div className="w-8 h-8 bg-teal-100 rounded-full flex items-center justify-center">
+                      <svg className="w-4 h-4 text-teal-600" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clipRule="evenodd" />
+                      </svg>
+                    </div>
+                    <div className="flex-1 text-left">
+                      <p className="text-sm font-medium text-gray-900">Employees</p>
+                      <p className="text-xs text-gray-500">Manage employees</p>
+                    </div>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Loans View - existing code */}
+        {selectedView === 'loans-dummy' && (
+          <div>
+            {/* Financial Summary */}
+            <div className="mb-8">
+              <h3 className="text-xl font-bold text-gray-800 mb-4">Financial Health Summary</h3>
+              <div className="bg-white rounded-xl shadow-lg p-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                  {/* Income vs Expenses */}
+                  <div>
+                    <h4 className="font-semibold text-gray-700 mb-4">Income vs Expenses</h4>
+                    <div className="space-y-4">
+                      <div className="flex items-center justify-between p-3 bg-green-50 rounded-lg border-l-4 border-green-500">
+                        <div>
+                          <p className="text-sm font-medium text-green-700">Total Income</p>
+                          <p className="text-lg font-bold text-green-600">
+                            ₹{(allPayments || []).reduce((sum, pay) => sum + Number(pay.amount || 0), 0).toLocaleString()}
+                          </p>
+                        </div>
+                        <div className="bg-green-100 p-2 rounded-full">
+                          <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+                          </svg>
+                        </div>
+                      </div>
+                      <div className="flex items-center justify-between p-3 bg-red-50 rounded-lg border-l-4 border-red-500">
+                        <div>
+                          <p className="text-sm font-medium text-red-700">Total Expenses</p>
+                          <p className="text-lg font-bold text-red-600">
+                            ₹{([...(branchExpenses || []), ...(branchEmployeeExpenses || [])]).reduce((sum, exp) => sum + Number(exp.amount || 0), 0).toLocaleString()}
+                          </p>
+                        </div>
+                        <div className="bg-red-100 p-2 rounded-full">
+                          <svg className="w-5 h-5 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 17h8m0 0V9m0 8l-8-8-4 4-6-6" />
+                          </svg>
+                        </div>
+                      </div>
+                      <div className={`flex items-center justify-between p-3 rounded-lg border-l-4 ${(() => {
+                        const income = (allPayments || []).reduce((sum, pay) => sum + Number(pay.amount || 0), 0);
+                        const expenses = ([...(branchExpenses || []), ...(branchEmployeeExpenses || [])]).reduce((sum, exp) => sum + Number(exp.amount || 0), 0);
+                        const net = income - expenses;
+                        return net >= 0 ? 'bg-blue-50 border-blue-500' : 'bg-orange-50 border-orange-500';
+                      })()}`}>
+                        <div>
+                          <p className={`text-sm font-medium ${(() => {
+                            const income = (allPayments || []).reduce((sum, pay) => sum + Number(pay.amount || 0), 0);
+                            const expenses = ([...(branchExpenses || []), ...(branchEmployeeExpenses || [])]).reduce((sum, exp) => sum + Number(exp.amount || 0), 0);
+                            const net = income - expenses;
+                            return net >= 0 ? 'text-blue-700' : 'text-orange-700';
+                          })()}`}>
+                            Net Profit/Loss
+                          </p>
+                          <p className={`text-lg font-bold ${(() => {
+                            const income = (allPayments || []).reduce((sum, pay) => sum + Number(pay.amount || 0), 0);
+                            const expenses = ([...(branchExpenses || []), ...(branchEmployeeExpenses || [])]).reduce((sum, exp) => sum + Number(exp.amount || 0), 0);
+                            const net = income - expenses;
+                            return net >= 0 ? 'text-blue-600' : 'text-orange-600';
+                          })()}`}>
+                            ₹{(() => {
+                              const income = (allPayments || []).reduce((sum, pay) => sum + Number(pay.amount || 0), 0);
+                              const expenses = ([...(branchExpenses || []), ...(branchEmployeeExpenses || [])]).reduce((sum, exp) => sum + Number(exp.amount || 0), 0);
+                              return Math.abs(income - expenses).toLocaleString();
+                            })()}
+                          </p>
+                        </div>
+                        <div className={`p-2 rounded-full ${(() => {
+                          const income = (allPayments || []).reduce((sum, pay) => sum + Number(pay.amount || 0), 0);
+                          const expenses = ([...(branchExpenses || []), ...(branchEmployeeExpenses || [])]).reduce((sum, exp) => sum + Number(exp.amount || 0), 0);
+                          const net = income - expenses;
+                          return net >= 0 ? 'bg-blue-100' : 'bg-orange-100';
+                        })()}`}>
+                          <svg className={`w-5 h-5 ${(() => {
+                            const income = (allPayments || []).reduce((sum, pay) => sum + Number(pay.amount || 0), 0);
+                            const expenses = ([...(branchExpenses || []), ...(branchEmployeeExpenses || [])]).reduce((sum, exp) => sum + Number(exp.amount || 0), 0);
+                            const net = income - expenses;
+                            return net >= 0 ? 'text-blue-600' : 'text-orange-600';
+                          })()}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
               </svg>
             </div>
-            <h2 className="text-3xl font-bold text-gray-800 mb-3 capitalize">Welcome to {branchName} Branch</h2>
-            <p className="text-gray-600 text-lg mb-8">Select an option from the sidebar to manage your branch</p>
-            
-            {/* Quick Summary */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-6 max-w-4xl mx-auto mt-6">
-              <div className="bg-white rounded-xl shadow-lg p-6 border-l-4 border-blue-500">
-                <p className="text-sm font-medium text-gray-600 mb-1">Total Entries</p>
-                <p className="text-3xl font-bold text-blue-600">{dataToUse.length}</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Loan Portfolio Health */}
+                  <div>
+                    <h4 className="font-semibold text-gray-700 mb-4">Loan Portfolio Health</h4>
+                    <div className="space-y-4">
+                      <div className="flex items-center justify-between p-3 bg-blue-50 rounded-lg border-l-4 border-blue-500">
+                        <div>
+                          <p className="text-sm font-medium text-blue-700">Active Loans</p>
+                          <p className="text-lg font-bold text-blue-600">{dataToUse.length}</p>
               </div>
-              <div className="bg-white rounded-xl shadow-lg p-6 border-l-4 border-green-500">
-                <p className="text-sm font-medium text-gray-600 mb-1">Total Loan</p>
-                <p className="text-2xl font-bold text-green-600">₹{totalLoan.toLocaleString()}</p>
+                        <div className="bg-blue-100 p-2 rounded-full">
+                          <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                          </svg>
               </div>
-              <div className="bg-white rounded-xl shadow-lg p-6 border-l-4 border-purple-500">
-                <p className="text-sm font-medium text-gray-600 mb-1">Total Interest</p>
-                <p className="text-2xl font-bold text-purple-600">₹{totalInterest.toLocaleString()}</p>
               </div>
-              <div className="bg-white rounded-xl shadow-lg p-6 border-l-4 border-orange-500">
-                <p className="text-sm font-medium text-gray-600 mb-1">Total EMI</p>
-                <p className="text-2xl font-bold text-orange-600">₹{totalEMI.toLocaleString()}</p>
+                      <div className="flex items-center justify-between p-3 bg-green-50 rounded-lg border-l-4 border-green-500">
+                        <div>
+                          <p className="text-sm font-medium text-green-700">Total Loan Amount</p>
+                          <p className="text-lg font-bold text-green-600">₹{totalLoan.toLocaleString()}</p>
+                        </div>
+                        <div className="bg-green-100 p-2 rounded-full">
+                          <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1" />
+                          </svg>
+                        </div>
+                      </div>
+                      <div className="flex items-center justify-between p-3 bg-purple-50 rounded-lg border-l-4 border-purple-500">
+                        <div>
+                          <p className="text-sm font-medium text-purple-700">Monthly EMI Collection</p>
+                          <p className="text-lg font-bold text-purple-600">₹{totalEMI.toLocaleString()}</p>
+                        </div>
+                        <div className="bg-purple-100 p-2 rounded-full">
+                          <svg className="w-5 h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                          </svg>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Quick Actions */}
+            <div className="mb-8">
+              <h3 className="text-xl font-bold text-gray-800 mb-4">Quick Actions</h3>
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <button 
+                  onClick={() => setSelectedView('loans')}
+                  className="bg-gradient-to-r from-blue-500 to-blue-600 text-white p-4 rounded-xl hover:from-blue-600 hover:to-blue-700 transition-all shadow-lg hover:shadow-xl"
+                >
+                  <div className="flex items-center gap-3">
+                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1" />
+                    </svg>
+                    <span className="font-semibold">Manage Loans</span>
+                  </div>
+                </button>
+                <button 
+                  onClick={() => setSelectedView('empExpenses')}
+                  className="bg-gradient-to-r from-green-500 to-green-600 text-white p-4 rounded-xl hover:from-green-600 hover:to-green-700 transition-all shadow-lg hover:shadow-xl"
+                >
+                  <div className="flex items-center gap-3">
+                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                    </svg>
+                    <span className="font-semibold">Employee Expenses</span>
+                  </div>
+                </button>
+                <button 
+                  onClick={() => setSelectedView('expenses')}
+                  className="bg-gradient-to-r from-purple-500 to-purple-600 text-white p-4 rounded-xl hover:from-purple-600 hover:to-purple-700 transition-all shadow-lg hover:shadow-xl"
+                >
+                  <div className="flex items-center gap-3">
+                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                    </svg>
+                    <span className="font-semibold">Branch Expenses</span>
+                  </div>
+                </button>
+                <button 
+                  onClick={() => setSelectedView('categoryMaster')}
+                  className="bg-gradient-to-r from-orange-500 to-orange-600 text-white p-4 rounded-xl hover:from-orange-600 hover:to-orange-700 transition-all shadow-lg hover:shadow-xl"
+                >
+                  <div className="flex items-center gap-3">
+                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                    </svg>
+                    <span className="font-semibold">Category Manager</span>
+                  </div>
+                </button>
               </div>
             </div>
           </div>
@@ -785,9 +1620,9 @@ export default function BranchDashboard() {
 
         {/* Category Master → Employee Totals Modal */}
         <Modal open={showCatEmpTotals} onClose={() => setShowCatEmpTotals(false)}>
-          <div className="bg-white rounded-2xl shadow-2xl p-6 mx-auto" style={{ width: '850px', maxWidth: '95vw' }}>
+          <div className="bg-white rounded-2xl shadow-2xl p-6 mx-auto" style={{ width: '1000px', maxWidth: '95vw', maxHeight: '90vh', overflowY: 'auto' }}>
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-xl font-bold text-blue-700">Employee Totals (Single Date)</h3>
+              <h3 className="text-xl font-bold text-blue-700">Employee Expense Totals - {branchName.toUpperCase()}</h3>
               <button className="text-gray-500 hover:text-gray-700" onClick={() => setShowCatEmpTotals(false)}>
                 <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12"/></svg>
               </button>
@@ -797,6 +1632,7 @@ export default function BranchDashboard() {
               <div>
                 <label className="block text-sm font-semibold mb-1 text-gray-700">Category</label>
                 <select className="border rounded-lg px-3 py-2 w-full focus:outline-none focus:ring-2 focus:ring-blue-400" value={totalsCategory} onChange={(e)=>setTotalsCategory(e.target.value)}>
+                  <option value="All">All Categories</option>
                   {categoryMasterCategories.map(c => (
                     <option key={c} value={c}>{c}</option>
                   ))}
@@ -805,8 +1641,9 @@ export default function BranchDashboard() {
               <div>
                 <label className="block text-sm font-semibold mb-1 text-gray-700">Month</label>
                 <select className="border rounded-lg px-3 py-2 w-full focus:outline-none focus:ring-2 focus:ring-blue-400" value={totalsMonth} onChange={(e)=>setTotalsMonth(e.target.value)}>
-                  {Array.from(new Set((branchEmployeeExpenses||[]).map(e => new Date(e.date).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })))).map(m => (
-                    <option key={m}>{m}</option>
+                  <option value="">All Months</option>
+                  {Array.from(new Set((branchEmployeeExpenses||[]).map(e => new Date(e.date).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })))).sort().map(m => (
+                    <option key={m} value={m}>{m}</option>
                   ))}
                 </select>
               </div>
@@ -817,43 +1654,77 @@ export default function BranchDashboard() {
             </div>
 
             {(() => {
-              const rows = (branchEmployeeExpenses||[])
+              // Filter expenses
+              const filteredExpenses = (branchEmployeeExpenses||[])
                 .filter(e => totalsCategory === 'All' || e.category === totalsCategory)
-                .filter(e => !totalsMonth || new Date(e.date).toLocaleDateString('en-US', { month: 'long' }) === totalsMonth)
-                .filter(e => !totalsDate || new Date(e.date).toISOString().slice(0,10) === totalsDate)
-                .reduce((map, e) => { const key = e.employeeName || 'Unknown'; map[key] = (map[key] || 0) + Number(e.amount||0); return map; }, {});
-              const entries = Object.entries(rows);
+                .filter(e => !totalsMonth || new Date(e.date).toLocaleDateString('en-US', { month: 'long', year: 'numeric' }) === totalsMonth)
+                .filter(e => !totalsDate || new Date(e.date).toISOString().slice(0,10) === totalsDate);
+              
+              // Group by employee
+              const rows = filteredExpenses.reduce((map, e) => { 
+                const key = e.employeeName || 'Unknown'; 
+                if (!map[key]) map[key] = { total: 0, count: 0, expenses: [] };
+                map[key].total += Number(e.amount||0);
+                map[key].count += 1;
+                map[key].expenses.push(e);
+                return map; 
+              }, {});
+              
+              const entries = Object.entries(rows).sort((a, b) => b[1].total - a[1].total);
+              const grandTotal = entries.reduce((s, [,data])=> s + data.total, 0);
+              const totalEntries = entries.reduce((s, [,data])=> s + data.count, 0);
+              
               return (
-                <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-                  <div className="overflow-x-auto">
-                    <table className="w-full">
-                      <thead className="bg-blue-50">
-                        <tr>
-                          <th className="px-4 py-2 text-left text-sm font-semibold text-gray-700">Employee</th>
-                          <th className="px-4 py-2 text-right text-sm font-semibold text-gray-700">Total (₹)</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {entries.length === 0 ? (
-                          <tr><td colSpan="2" className="px-4 py-6 text-center text-gray-500">No data for selected filters</td></tr>
-                        ) : entries.map(([name, amt]) => (
-                          <tr key={name} className="even:bg-gray-50">
-                            <td className="px-4 py-2 text-base text-gray-800">{name}</td>
-                            <td className="px-4 py-2 text-base text-right font-semibold text-emerald-700">₹{amt.toLocaleString('en-IN')}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                      {entries.length > 0 && (
-                        <tfoot className="bg-blue-50">
+                <>
+                  {/* Summary Cards */}
+                  <div className="grid grid-cols-3 gap-4 mb-4">
+                    <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
+                      <p className="text-sm text-gray-600 mb-1">Total Employees</p>
+                      <p className="text-2xl font-bold text-blue-700">{entries.length}</p>
+                    </div>
+                    <div className="bg-green-50 p-4 rounded-lg border border-green-200">
+                      <p className="text-sm text-gray-600 mb-1">Total Expenses</p>
+                      <p className="text-2xl font-bold text-green-700">{totalEntries}</p>
+                    </div>
+                    <div className="bg-emerald-50 p-4 rounded-lg border border-emerald-200">
+                      <p className="text-sm text-gray-600 mb-1">Grand Total</p>
+                      <p className="text-2xl font-bold text-emerald-700">₹{grandTotal.toLocaleString('en-IN')}</p>
+                    </div>
+                  </div>
+
+                  {/* Table */}
+                  <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+                    <div className="overflow-x-auto">
+                      <table className="w-full">
+                        <thead className="bg-blue-50">
                           <tr>
-                            <td className="px-4 py-2 text-right font-bold">Grand Total</td>
-                            <td className="px-4 py-2 text-right font-bold text-emerald-700">₹{entries.reduce((s, [,a])=> s + a, 0).toLocaleString('en-IN')}</td>
+                            <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Employee Name</th>
+                            <th className="px-4 py-3 text-center text-sm font-semibold text-gray-700">No. of Expenses</th>
+                            <th className="px-4 py-3 text-right text-sm font-semibold text-gray-700">Total Amount (₹)</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {entries.length === 0 ? (
+                            <tr><td colSpan="3" className="px-4 py-6 text-center text-gray-500">No data for selected filters</td></tr>
+                          ) : entries.map(([name, data]) => (
+                            <tr key={name} className="even:bg-gray-50 hover:bg-blue-50 transition-colors">
+                              <td className="px-4 py-3 text-base text-gray-800 font-medium">{name}</td>
+                              <td className="px-4 py-3 text-base text-center text-gray-600">{data.count}</td>
+                              <td className="px-4 py-3 text-base text-right font-semibold text-emerald-700">₹{data.total.toLocaleString('en-IN')}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                        <tfoot className="bg-blue-50 border-t-2 border-blue-200">
+                          <tr>
+                            <td className="px-4 py-3 text-right font-bold text-gray-800">Grand Total</td>
+                            <td className="px-4 py-3 text-center font-bold text-gray-800">{totalEntries}</td>
+                            <td className="px-4 py-3 text-right font-bold text-emerald-700 text-lg">₹{grandTotal.toLocaleString('en-IN')}</td>
                           </tr>
                         </tfoot>
-                      )}
-                    </table>
+                      </table>
+                    </div>
                   </div>
-                </div>
+                </>
               );
             })()}
           </div>
@@ -879,8 +1750,21 @@ export default function BranchDashboard() {
                 onClick={() => {
                   const name = (newCategoryName || '').trim();
                   if (!name) return;
-                  setCategoryMasterCategories(prev => prev.includes(name) ? prev : [...prev, name]);
+                  
+                  // Check if category already exists
+                  if (categoryMasterCategories.includes(name)) {
+                    alert('Category already exists!');
+                    return;
+                  }
+                  
+                  // Add to manually added categories for persistence
+                  setAddedCategories(prev => new Set([...prev, name]));
+                  
+                  // Add category to current branch only - completely separate from other branches
+                  setCategoryMasterCategories(prev => [...prev, name]);
+                  setNewCategoryName(''); // Reset form
                   setAddCategoryOpen(false);
+                  console.log('Added new category:', name, 'to branch:', branchName);
                 }}
               >
                 Add
@@ -889,64 +1773,322 @@ export default function BranchDashboard() {
           </div>
         </Modal>
 
-        {/* Category Master → Individual Category (Employee Expenses) */}
+        {/* Category Master → Individual Category (Employee Expenses) - Enhanced Modal */}
         <Modal open={!!masterCategoryDetail} onClose={() => setMasterCategoryDetail(null)}>
           {masterCategoryDetail && (
-            <div className="bg-white rounded-2xl shadow-2xl p-6 mx-auto" style={{ width: '700px', maxWidth: '95vw' }}>
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-xl font-bold text-blue-700">{masterCategoryDetail} - Employee Expenses</h3>
-                <button className="text-gray-500 hover:text-gray-700" onClick={() => setMasterCategoryDetail(null)}>
-                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12"/></svg>
-                </button>
+            <div className="bg-white rounded-2xl shadow-2xl p-6 mx-auto" style={{ width: '90vw', maxWidth: '1200px', height: '85vh', maxHeight: '800px', display: 'flex', flexDirection: 'column' }}>
+              <div className="flex justify-between items-center mb-6 flex-shrink-0">
+                <h2 className="text-xl font-bold text-blue-700">{masterCategoryDetail} Entries</h2>
               </div>
 
+              {/* Summary Cards */}
               {(() => {
-                // Group employee expenses by date for the selected category
-                const grouped = (branchEmployeeExpenses || [])
-                  .filter(e => e.category === masterCategoryDetail)
-                  .reduce((map, e) => {
-                    const d = new Date(e.date).toISOString().slice(0,10);
-                    map[d] = (map[d] || 0) + Number(e.amount || 0);
-                    return map;
-                  }, {});
-                const rows = Object.entries(grouped).sort(([a],[b]) => new Date(b) - new Date(a));
-                const grand = rows.reduce((s, [,amt]) => s + amt, 0);
+                // Get expenses for the selected category
+                const regularExpenses = (branchExpenses || [])
+                  .filter(e => e.category === masterCategoryDetail);
+                const employeeExpenses = (branchEmployeeExpenses || [])
+                  .filter(e => e.category === masterCategoryDetail);
+                
+                const regularTotal = regularExpenses.reduce((sum, exp) => sum + (exp.amount || 0), 0);
+                const employeeTotal = employeeExpenses.reduce((sum, exp) => sum + Number(exp.amount || 0), 0);
+                const grandTotal = regularTotal + employeeTotal;
+                
                 return (
-                  <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-                    <div className="overflow-x-auto">
-                      <table className="w-full">
-                        <thead className="bg-blue-50">
-                          <tr>
-                            <th className="px-4 py-2 text-left text-sm font-semibold text-gray-700">Date</th>
-                            <th className="px-4 py-2 text-right text-sm font-semibold text-gray-700">Amount (₹)</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {rows.length === 0 ? (
-                            <tr><td colSpan="2" className="px-4 py-6 text-center text-gray-500">No employee expenses found for this category</td></tr>
-                          ) : rows.map(([date, amt]) => (
-                            <tr key={date} className="even:bg-gray-50">
-                              <td className="px-4 py-2 text-base text-gray-800">{new Date(date).toLocaleDateString('en-IN')}</td>
-                              <td className="px-4 py-2 text-base text-right font-semibold text-emerald-700">₹{amt.toLocaleString('en-IN')}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                        {rows.length > 0 && (
-                          <tfoot className="bg-blue-50">
-                            <tr>
-                              <td className="px-4 py-2 text-right font-bold">Total</td>
-                              <td className="px-4 py-2 text-right font-bold text-emerald-700">₹{grand.toLocaleString('en-IN')}</td>
-                            </tr>
-                          </tfoot>
-                        )}
-                      </table>
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6 flex-shrink-0">
+                    <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">
+                      <h3 className="text-sm font-semibold text-blue-700 mb-1">Total Entries</h3>
+                      <p className="text-2xl font-bold text-blue-600">{regularExpenses.length + employeeExpenses.length}</p>
+                    </div>
+                    <div className="bg-green-50 rounded-lg p-4 border border-green-200">
+                      <h3 className="text-sm font-semibold text-green-700 mb-1">Regular Expenses</h3>
+                      <p className="text-2xl font-bold text-green-600">{regularExpenses.length}</p>
+                      <p className="text-sm text-green-600">₹{regularTotal.toLocaleString()}</p>
+                    </div>
+                    <div className="bg-purple-50 rounded-lg p-4 border border-purple-200">
+                      <h3 className="text-sm font-semibold text-purple-700 mb-1">Employee Expenses</h3>
+                      <p className="text-2xl font-bold text-purple-600">{employeeExpenses.length}</p>
+                      <p className="text-sm text-purple-600">₹{employeeTotal.toLocaleString()}</p>
+                    </div>
+                    <div className="bg-orange-50 rounded-lg p-4 border border-orange-200">
+                      <h3 className="text-sm font-semibold text-orange-700 mb-1">Grand Total</h3>
+                      <p className="text-2xl font-bold text-orange-600">₹{grandTotal.toLocaleString()}</p>
                     </div>
                   </div>
                 );
               })()}
+              
+              {/* Enhanced Expenses Table */}
+              <div className="flex-1 overflow-y-auto">
+                <div className="bg-white rounded-lg border border-gray-200">
+                    <div className="overflow-x-auto">
+                      <table className="w-full">
+                      <thead className="bg-gray-50 border-b border-gray-200">
+                        <tr>
+                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
+                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Description/Employee</th>
+                          <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Amount</th>
+                          <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                          </tr>
+                        </thead>
+                      <tbody className="bg-white divide-y divide-gray-200">
+                        {(() => {
+                          const regularExpenses = (branchExpenses || [])
+                            .filter(e => e.category === masterCategoryDetail)
+                            .sort((a, b) => new Date(b.date) - new Date(a.date));
+                          const employeeExpenses = (branchEmployeeExpenses || [])
+                            .filter(e => e.category === masterCategoryDetail)
+                            .sort((a, b) => new Date(b.date) - new Date(a.date));
+                          
+                          return (
+                            <>
+                              {/* Regular Expenses */}
+                              {regularExpenses.map((expense, index) => (
+                                <tr key={`regular-${index}`} className="hover:bg-gray-50">
+                                  <td className="px-4 py-3 text-sm text-gray-900">
+                                    {new Date(expense.date).toLocaleDateString('en-IN')}
+                                  </td>
+                                  <td className="px-4 py-3 text-sm text-gray-900">
+                                    {expense.description || '-'}
+                                  </td>
+                                  <td className="px-4 py-3 text-sm text-gray-900 text-right font-medium">
+                                    ₹{expense.amount?.toLocaleString() || 0}
+                                  </td>
+                                  <td className="px-4 py-3 text-center">
+                                    <div className="flex gap-2 justify-center">
+                                      <button
+                                        className="text-red-600 hover:underline text-sm"
+                                        onClick={() => {
+                                          if (window.confirm('Delete this expense?')) {
+                                            // Handle delete functionality for regular expenses
+                                            console.log('Delete regular expense:', expense._id);
+                                          }
+                                        }}
+                                      >
+                                        Delete
+                                      </button>
+                                    </div>
+                                  </td>
+                            </tr>
+                          ))}
+                              
+                              {/* Employee Expenses */}
+                              {employeeExpenses.map((expense, index) => (
+                                <tr key={`employee-${index}`} className="hover:bg-gray-50">
+                                  <td className="px-4 py-3 text-sm text-gray-900">
+                                    {new Date(expense.date).toLocaleDateString('en-IN')}
+                                  </td>
+                                  <td className="px-4 py-3 text-sm text-gray-900">
+                                    <div className="flex items-center gap-2">
+                                      <span>{expense.employeeName || '-'}</span>
+                                      <button
+                                        className="p-1 hover:bg-gray-200 rounded-full transition-colors"
+                                        title="View employee details"
+                                        onClick={() => {
+                                          // Get all employee expenses for the same category and date
+                                          const sameDateExpenses = (branchEmployeeExpenses || [])
+                                            .filter(e => e.category === expense.category && 
+                                              new Date(e.date).toISOString().split('T')[0] === new Date(expense.date).toISOString().split('T')[0]);
+                                          
+                                          setSelectedEmployeeDetails({
+                                            category: expense.category,
+                                            date: expense.date,
+                                            employees: sameDateExpenses.map(emp => ({
+                                              name: emp.employeeName,
+                                              amount: Number(emp.amount || 0),
+                                              id: emp._id,
+                                              description: emp.description || ''
+                                            })),
+                                            totalAmount: sameDateExpenses.reduce((sum, emp) => sum + Number(emp.amount || 0), 0)
+                                          });
+                                          setEmployeeDetailsModalOpen(true);
+                                        }}
+                                      >
+                                        <svg
+                                          className="w-4 h-4 text-blue-600 hover:text-blue-800"
+                                          fill="none"
+                                          stroke="currentColor"
+                                          viewBox="0 0 24 24"
+                                        >
+                                          <path
+                                            strokeLinecap="round"
+                                            strokeLinejoin="round"
+                                            strokeWidth={2}
+                                            d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
+                                          />
+                                          <path
+                                            strokeLinecap="round"
+                                            strokeLinejoin="round"
+                                            strokeWidth={2}
+                                            d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"
+                                          />
+                                        </svg>
+                                      </button>
+                                    </div>
+                                  </td>
+                                  <td className="px-4 py-3 text-sm text-gray-900 text-right font-medium">
+                                    ₹{Number(expense.amount || 0).toLocaleString('en-IN')}
+                                  </td>
+                                  <td className="px-4 py-3 text-center">
+                                    <div className="flex gap-2 justify-center">
+                                      <button
+                                        className="text-red-600 hover:underline text-sm"
+                                        onClick={() => {
+                                          if (window.confirm('Delete this employee expense?')) {
+                                            // Handle delete functionality for employee expenses
+                                            console.log('Delete employee expense:', expense._id);
+                                          }
+                                        }}
+                                      >
+                                        Delete
+                                      </button>
+                                    </div>
+                                  </td>
+                                </tr>
+                              ))}
+                              
+                              {/* Empty state */}
+                              {(!regularExpenses.length && !employeeExpenses.length) && (
+                                <tr>
+                                  <td colSpan="4" className="px-4 py-8 text-center text-gray-500">
+                                    No expenses found for this category
+                                  </td>
+                                </tr>
+                              )}
+                            </>
+                          );
+                        })()}
+                        </tbody>
+                      <tfoot className="bg-gray-50 border-t border-gray-200">
+                        <tr>
+                          <td colSpan="3" className="px-4 py-3 text-right text-sm font-medium text-gray-700">
+                            Grand Total:
+                          </td>
+                          <td className="px-4 py-3 text-right text-sm font-bold text-gray-900">
+                            {(() => {
+                              const regularTotal = (branchExpenses || [])
+                                .filter(e => e.category === masterCategoryDetail)
+                                .reduce((sum, exp) => sum + (exp.amount || 0), 0);
+                              const employeeTotal = (branchEmployeeExpenses || [])
+                                .filter(e => e.category === masterCategoryDetail)
+                                .reduce((sum, exp) => sum + Number(exp.amount || 0), 0);
+                              const grandTotal = regularTotal + employeeTotal;
+                              return `₹${grandTotal.toLocaleString()}`;
+                            })()}
+                          </td>
+                            </tr>
+                          </tfoot>
+                      </table>
+                    </div>
+                  </div>
+              </div>
             </div>
           )}
         </Modal>
+
+        {/* Employee Details Modal */}
+        <Modal open={employeeDetailsModalOpen} onClose={() => setEmployeeDetailsModalOpen(false)}>
+          <div className="bg-white rounded-2xl shadow-2xl p-6 mx-auto" style={{ width: '700px', maxWidth: '90vw' }}>
+            <h2 className="text-xl font-bold mb-4 text-blue-700">
+              Employee Details - {selectedEmployeeDetails?.category}
+            </h2>
+            <p className="text-gray-600 mb-4">
+              Date: {selectedEmployeeDetails?.date ? new Date(selectedEmployeeDetails.date).toLocaleDateString('en-IN', {
+                weekday: 'long',
+                year: 'numeric',
+                month: 'long',
+                day: 'numeric'
+              }) : ''}
+            </p>
+            
+            <style>{`
+              .employee-details-scroll::-webkit-scrollbar {
+                width: 6px;
+              }
+              .employee-details-scroll::-webkit-scrollbar-track {
+                background: #f3f4f6;
+              }
+              .employee-details-scroll::-webkit-scrollbar-thumb {
+                background: #9ca3af;
+                border-radius: 3px;
+              }
+              .employee-details-scroll::-webkit-scrollbar-thumb:hover {
+                background: #6b7280;
+              }
+            `}</style>
+            <div 
+              className="overflow-x-auto max-h-96 overflow-y-auto employee-details-scroll"
+              style={{
+                scrollbarWidth: 'thin',
+                scrollbarColor: '#9ca3af #f3f4f6'
+              }}
+            >
+              <table className="w-full border-collapse border border-gray-300">
+                <thead className="bg-blue-50 sticky top-0">
+                  <tr>
+                    <th className="border border-gray-300 px-4 py-3 text-left font-semibold text-gray-700">Employee Name</th>
+                    <th className="border border-gray-300 px-4 py-3 text-right font-semibold text-gray-700">Amount (₹)</th>
+                    <th className="border border-gray-300 px-4 py-3 text-center font-semibold text-gray-700">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {selectedEmployeeDetails?.employees && selectedEmployeeDetails.employees.map((employee) => (
+                    <tr key={employee.id} className="hover:bg-gray-50">
+                      <td className="border border-gray-300 px-4 py-3 font-medium">
+                        {employee.name}
+                      </td>
+                      <td className="border border-gray-300 px-4 py-3 text-right font-medium">
+                        ₹{employee.amount.toLocaleString()}
+                      </td>
+                      <td className="border border-gray-300 px-4 py-3 text-center">
+                        <div className="flex gap-2 justify-center">
+                          <button
+                            className="bg-red-600 text-white px-3 py-1 rounded text-sm hover:bg-red-700"
+                            onClick={async () => {
+                              if (window.confirm('Are you sure you want to delete this employee expense?')) {
+                                try {
+                                  await axios.delete(api.delete(`/api/employee-expenses/${employee.id}`));
+                                  await loadBranchEmployeeExpenses();
+                                  setEmployeeDetailsModalOpen(false);
+                                  alert('Employee expense deleted successfully');
+                                } catch (error) {
+                                  console.error('Error deleting employee expense:', error);
+                                  alert('Error deleting employee expense: ' + (error.response?.data?.message || error.message));
+                                }
+                              }
+                            }}
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot className="bg-green-50 sticky bottom-0">
+                  <tr>
+                    <td className="border border-gray-300 px-4 py-3 font-bold text-gray-700">
+                      Total:
+                    </td>
+                    <td className="border border-gray-300 px-4 py-3 text-right font-bold text-green-600">
+                      ₹{selectedEmployeeDetails?.totalAmount ? selectedEmployeeDetails.totalAmount.toLocaleString() : 0}
+                    </td>
+                    <td className="border border-gray-300 px-4 py-3"></td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+            
+            <div className="flex justify-end mt-6">
+              <button
+                className="bg-gray-500 text-white px-6 py-2 rounded-lg font-semibold hover:bg-gray-600 transition-colors"
+                onClick={() => setEmployeeDetailsModalOpen(false)}
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </Modal>
+
         {/* Loans View */}
         {selectedView === 'loans' && (
           <>
@@ -1381,7 +2523,14 @@ export default function BranchDashboard() {
             {/* Add Employee Expense Modal */}
             <Modal open={empExpAddOpen} onClose={closeModals}>
               <div className="bg-white rounded-2xl shadow-2xl p-6 mx-auto" style={{ width: '600px', maxWidth: '90vw' }}>
-                <h2 className="text-xl font-bold mb-4 text-emerald-700">Add Employee Expense</h2>
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className="text-xl font-bold text-emerald-700">Add Employee Expense</h2>
+                  <button className="text-gray-500 hover:text-gray-700" onClick={closeModals}>
+                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12"/>
+                    </svg>
+                  </button>
+                </div>
                 <form onSubmit={handleAddEmpExpense}>
                   <div className="grid grid-cols-2 gap-4">
                     <div className="col-span-2">
@@ -1420,7 +2569,14 @@ export default function BranchDashboard() {
             {/* Edit Employee Expense Modal */}
             <Modal open={empExpEditOpen} onClose={closeModals}>
               <div className="bg-white rounded-2xl shadow-2xl p-6 mx-auto" style={{ width: '600px', maxWidth: '90vw' }}>
-                <h2 className="text-xl font-bold mb-4 text-emerald-700">Edit Employee Expense</h2>
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className="text-xl font-bold text-emerald-700">Edit Employee Expense</h2>
+                  <button className="text-gray-500 hover:text-gray-700" onClick={closeModals}>
+                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12"/>
+                    </svg>
+                  </button>
+                </div>
                 <form onSubmit={handleUpdateEmpExpense}>
                   <div className="grid grid-cols-2 gap-4">
                     <div className="col-span-2">
@@ -1487,25 +2643,59 @@ export default function BranchDashboard() {
                 <table className="w-full">
                   <thead className="bg-gray-50 border-b border-gray-200">
                     <tr>
+                      <th className="px-4 py-2 text-left text-xs font-semibold text-gray-700 uppercase">Date</th>
                       <th className="px-4 py-2 text-left text-xs font-semibold text-gray-700 uppercase">Customer</th>
+                      <th className="px-4 py-2 text-left text-xs font-semibold text-gray-700 uppercase">Place</th>
                       <th className="px-4 py-2 text-left text-xs font-semibold text-gray-700 uppercase">Mobile</th>
-                      <th className="px-4 py-2 text-left text-xs font-semibold text-gray-700 uppercase">Loans</th>
+                      <th className="px-4 py-2 text-right text-xs font-semibold text-gray-700 uppercase">Loan</th>
+                      <th className="px-4 py-2 text-center text-xs font-semibold text-gray-700 uppercase">Total Loans</th>
                       <th className="px-4 py-2 text-center text-xs font-semibold text-gray-700 uppercase">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
                     {Array.from(new Map(filteredData.map(e => [e.customer, e])).values()).map((entry) => {
-                      const loansCount = branchData.filter(x => x.customer === entry.customer).length;
+                      const customerLoans = branchData.filter(x => x.customer === entry.customer);
+                      const loansCount = customerLoans.length;
+                      const totalLoanAmount = customerLoans.reduce((sum, loan) => sum + Number(loan.loan || 0), 0);
                       return (
                         <tr key={entry.customer} className="hover:bg-purple-50 transition-colors">
+                          <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-600">{new Date(entry.date).toLocaleDateString('en-IN')}</td>
                           <td className="px-4 py-2 whitespace-nowrap text-sm font-medium text-gray-900">{entry.customer}</td>
+                          <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-600">{entry.place}</td>
                           <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-600">{entry.mobile}</td>
-                          <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-600">{loansCount}</td>
+                          <td className="px-4 py-2 whitespace-nowrap text-sm text-right font-semibold text-green-600">₹{totalLoanAmount.toLocaleString('en-IN')}</td>
+                          <td className="px-4 py-2 whitespace-nowrap text-sm text-center text-gray-600">{loansCount}</td>
                           <td className="px-4 py-2 whitespace-nowrap text-center">
-                            <button
-                              onClick={() => openCustomerDetails(entry)}
-                              className="px-3 py-1.5 text-sm text-white bg-purple-600 hover:bg-purple-700 rounded-lg"
-                            >View</button>
+                            <div className="flex gap-2 justify-center">
+                              <button
+                                onClick={() => openCustomerDetails(entry)}
+                                className="p-1.5 text-blue-600 hover:text-blue-900 hover:bg-blue-100 rounded transition-all"
+                                title="View details"
+                              >
+                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                                </svg>
+                              </button>
+                              <button
+                                onClick={() => handleEdit(entry)}
+                                className="p-1.5 text-green-600 hover:text-green-900 hover:bg-green-100 rounded transition-all"
+                                title="Edit entry"
+                              >
+                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                </svg>
+                              </button>
+                              <button
+                                onClick={() => handleDelete(entry._id)}
+                                className="p-1.5 text-red-600 hover:text-red-900 hover:bg-red-100 rounded transition-all"
+                                title="Delete entry"
+                              >
+                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                </svg>
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       );
@@ -1737,16 +2927,79 @@ export default function BranchDashboard() {
                   <div key={cat} className="bg-gray-50 rounded-lg shadow p-4 flex items-center justify-between border border-gray-200">
                     <div>
                       <h3 className="text-lg font-bold text-gray-800">{cat}</h3>
-                      <p className="text-gray-500 text-sm">{(branchExpenses||[]).filter(e => e.category === cat).length + (filteredBranchEmployeeExpenses||[]).filter(e => e.category === cat).length} entries</p>
+                      <p className="text-gray-500 text-sm">{(branchExpenses||[]).filter(e => e.category === cat).length + (branchEmployeeExpenses||[]).filter(e => e.category === cat).length} entries</p>
                     </div>
                     <div className="flex items-center gap-2">
                       <button className="p-2 hover:bg-gray-200 rounded" title="View" onClick={() => setMasterCategoryDetail(cat)}>
                         <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
                       </button>
-                      <button className="p-2 hover:bg-gray-200 rounded" title="Edit" onClick={() => { const name = prompt('Rename category', cat); if (!name || name === cat) return; setCategoryMasterCategories(prev => prev.map(c => c === cat ? name : c)); }}>
+                      <button className="p-2 hover:bg-gray-200 rounded" title="Edit" onClick={async () => { 
+                        const newName = prompt('Rename category', cat); 
+                        if (!newName || newName === cat) return; 
+                        
+                        try {
+                          // Update category in all related expenses
+                          await updateCategoryInExpenses(cat, newName);
+                          
+                          // Update local state
+                          setCategoryMasterCategories(prev => prev.map(c => c === cat ? newName : c));
+                          alert('Category renamed successfully');
+                        } catch (error) {
+                          console.error('Error renaming category:', error);
+                          alert('Error renaming category: ' + (error.response?.data?.message || error.message));
+                        }
+                      }}>
                         <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
                       </button>
-                      <button className="p-2 hover:bg-gray-200 rounded" title="Delete" onClick={() => { if (!window.confirm(`Delete category "${cat}"?`)) return; setCategoryMasterCategories(prev => prev.filter(c => c !== cat)); }}>
+                      <button 
+                        className="p-2 hover:bg-red-100 rounded border border-red-200 hover:border-red-300" 
+                        title="Delete Category"
+                        onClick={async () => { 
+                          // Count expenses that will be deleted
+                          const branchExpCount = (branchExpenses || []).filter(exp => 
+                            exp.category === cat && 
+                            exp.branch && 
+                            exp.branch.toLowerCase() === branchName.toLowerCase()
+                          ).length;
+                          
+                          const empExpCount = (branchEmployeeExpenses || []).filter(exp => 
+                            exp.category === cat && 
+                            exp.branch && 
+                            exp.branch.toLowerCase() === branchName.toLowerCase()
+                          ).length;
+                          
+                          const totalExpenses = branchExpCount + empExpCount;
+                          
+                          const confirmMessage = `Delete category "${cat}"?\n\nThis will delete:\n- ${branchExpCount} branch expenses\n- ${empExpCount} employee expenses\n- Total: ${totalExpenses} expenses\n\nThis action cannot be undone.`;
+                          
+                          if (!window.confirm(confirmMessage)) return; 
+                          
+                          try {
+                            console.log('Starting deletion for category:', cat);
+                            
+                            // Delete all expenses with this category for current branch
+                            await deleteCategoryAndExpenses(cat);
+                            
+                            // Add to deleted categories set to prevent re-adding (for default categories)
+                            setDeletedCategories(prev => new Set([...prev, cat.toLowerCase()]));
+                            
+                            // Remove from added categories if it was manually added
+                            setAddedCategories(prev => {
+                              const newSet = new Set(prev);
+                              newSet.delete(cat);
+                              return newSet;
+                            });
+                            
+                            // Update local state - remove from categories list
+                            setCategoryMasterCategories(prev => prev.filter(c => c !== cat));
+                            
+                            alert(`Category "${cat}" and ${totalExpenses} related expenses deleted successfully from ${branchName} branch.`);
+                          } catch (error) {
+                            console.error('Error deleting category:', error);
+                            alert('Error deleting category: ' + (error.response?.data?.message || error.message));
+                          }
+                        }}
+                      >
                         <svg className="w-5 h-5 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
                       </button>
                     </div>
@@ -1986,7 +3239,12 @@ export default function BranchDashboard() {
               </div>
               <div className="col-span-2">
                 <label className="block text-sm font-semibold mb-2 text-gray-700">Category *</label>
-                <input type="text" className="border-2 border-gray-200 rounded-lg px-4 py-3 w-full focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent" value={expenseForm.category} onChange={(e)=>setExpenseForm({...expenseForm, category: e.target.value})} required />
+                <select className="border-2 border-gray-200 rounded-lg px-4 py-3 w-full focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent" value={expenseForm.category} onChange={(e)=>setExpenseForm({...expenseForm, category: e.target.value})} required>
+                  <option value="">Select Category</option>
+                  {categoryMasterCategories.map(cat => (
+                    <option key={cat} value={cat}>{cat}</option>
+                  ))}
+                </select>
               </div>
               <div>
                 <label className="block text-sm font-semibold mb-2 text-gray-700">Amount (₹) *</label>
